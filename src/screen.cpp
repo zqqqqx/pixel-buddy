@@ -1,5 +1,6 @@
 #include "screen.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -45,7 +46,8 @@ static const uint8_t FONT[95][5] = {
 };
 
 static volatile bool on = false;
-static bool isMenu = false;
+static bool isMenu = false, isSplash = false;
+static volatile int splashPct = -1;
 static char items[4][24];
 static int nItems = 0, dangerItem = -1;
 static const int BTN_X0 = 18, BTN_X1 = 222, BTN_Y0 = 48, BTN_H = 40, BTN_GAP = 8;
@@ -68,6 +70,7 @@ void menu(const char* title, const char* const* it, int n, int danger) {
   for (int i = 0; i < nItems; ++i) snprintf(items[i], sizeof(items[0]), "%s", it[i]);
   dangerItem = danger;
   qrN = 0;
+  isSplash = false;
   isMenu = true;
   on = true;
   ver = ver + 1;
@@ -82,7 +85,7 @@ int hit(int x, int y) {
 }
 
 void show(const char* title, const char* code, const char* l1, const char* l2, const char* l3) {
-  isMenu = false;
+  isMenu = isSplash = false;
   snprintf(text[0], sizeof(text[0]), "%s", title);
   snprintf(text[1], sizeof(text[1]), "%s", l1);
   snprintf(text[2], sizeof(text[2]), "%s", l2);
@@ -93,6 +96,16 @@ void show(const char* title, const char* code, const char* l1, const char* l2, c
   c.qrcode_ecc_level = ESP_QRCODE_ECC_LOW;
   qrN = 0;
   esp_qrcode_generate(&c, code);
+  on = true;
+  ver = ver + 1;
+}
+void splash(const char* title, const char* line, int pct) {
+  snprintf(text[0], sizeof(text[0]), "%s", title);
+  snprintf(text[1], sizeof(text[1]), "%s", line);
+  splashPct = pct;
+  qrN = 0;
+  isMenu = false;
+  isSplash = true;
   on = true;
   ver = ver + 1;
 }
@@ -150,7 +163,63 @@ static void renderMenu(uint16_t* buf, int x0, int y0, int x1, int y1) {
     }
 }
 
+// brand colours (docs/brand.md)
+static const uint8_t CREAM[3] = {246, 243, 234}, BLUE[3] = {61, 107, 255}, MUTED[3] = {139, 148, 169},
+                     TRACK[3] = {37, 43, 58};
+static inline float clamp01(float v) { return v < 0.f ? 0.f : v > 1.f ? 1.f : v; }
+// rounded box (pill), signed distance
+static inline float sdPill(float x, float y, float hx, float hy) {
+  float r = hx < hy ? hx : hy, qx = fabsf(x) - hx + r, qy = fabsf(y) - hy + r;
+  float ox = qx > 0 ? qx : 0, oy = qy > 0 ? qy : 0;
+  return sqrtf(ox * ox + oy * oy) + (qx > qy ? (qx < 0 ? qx : 0) : (qy < 0 ? qy : 0)) - r;
+}
+// the logo: two eyes looking up to the right, the right one a little bigger (Pixel is never quite symmetric)
+static void logoPixel(int x, int y, float* c) {
+  for (int i = 0; i < 2; ++i) {
+    float s = i ? 1.07f : 1.f, cx = 120.f + (i ? 33.f : -33.f), cy = 84.f - (i ? 2.f : 0.f);
+    float px = (x + 0.5f - cx) / s, py = (y + 0.5f - cy) / s;
+    float a = clamp01(0.5f - sdPill(px, py, 23.f, 31.f) * s);
+    if (a <= 0.f) continue;
+    float ix = px - 5.f, iy = py + 5.f;
+    float di = sqrtf(ix * ix / (13.f * 13.f) + iy * iy / (19.f * 19.f));
+    float ai = clamp01((1.f - di) * 13.f * s);
+    float hx = px - 0.f, hy = py + 15.f;
+    float ah = clamp01(5.5f - sqrtf(hx * hx + hy * hy)) * ai;
+    for (int k = 0; k < 3; ++k) {
+      float v = CREAM[k] + (BLUE[k] - CREAM[k]) * ai;
+      v += (255.f - v) * ah;
+      c[k] += (v - c[k]) * a;
+    }
+  }
+}
+static void renderSplash(uint16_t* buf, int x0, int y0, int x1, int y1) {
+  const int TITLE_Y = 142, LINE_Y = 176, BAR_Y = 204, BAR_X0 = 40, BAR_X1 = 200, BAR_H = 8;
+  int pct = splashPct;
+  for (int y = y0; y < y1; ++y)
+    for (int x = x0; x < x1; ++x) {
+      float c[3] = {0, 0, 0};
+      if (y < 130) logoPixel(x, y, c);
+      if (textPixel(text[0], 3, TITLE_Y, x, y)) c[0] = CREAM[0], c[1] = CREAM[1], c[2] = CREAM[2];
+      if (textPixel(text[1], pct >= 0 ? 1 : 2, pct >= 0 ? 226 : LINE_Y, x, y))
+        c[0] = MUTED[0], c[1] = MUTED[1], c[2] = MUTED[2];
+      if (pct >= 0 && y >= BAR_Y && y < BAR_Y + BAR_H && x >= BAR_X0 && x < BAR_X1) {
+        float d = sdPill(x + 0.5f - 120.f, y + 0.5f - (BAR_Y + BAR_H / 2.f), (BAR_X1 - BAR_X0) / 2.f, BAR_H / 2.f);
+        float a = clamp01(0.5f - d);
+        bool fill = x < BAR_X0 + (BAR_X1 - BAR_X0) * pct / 100;
+        for (int k = 0; k < 3; ++k) {
+          float v = fill ? BLUE[k] : TRACK[k];  // flat colours, no gradients (docs/brand.md)
+          c[k] += (v - c[k]) * a;
+        }
+      }
+      *buf++ = px((uint8_t)c[0], (uint8_t)c[1], (uint8_t)c[2]);
+    }
+}
+
 void render(uint16_t* buf, int x0, int y0, int x1, int y1) {
+  if (isSplash) {
+    renderSplash(buf, x0, y0, x1, y1);
+    return;
+  }
   if (isMenu) {
     renderMenu(buf, x0, y0, x1, y1);
     return;

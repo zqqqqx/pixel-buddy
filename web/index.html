@@ -4,9 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b0d12">
-<title>Pixel</title>
+<title>Pixel Buddy</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22 role=%22img%22 aria-label=%22Pixel Buddy%22%3E%3Crect width=%22128%22 height=%22128%22 rx=%2230%22 fill=%22%2311141C%22/%3E%3Cg transform=%22translate%2840 66%29%22%3E%3Crect x=%22-17%22 y=%22-23%22 width=%2234%22 height=%2246%22 rx=%2217%22 fill=%22%23F6F3EA%22/%3E%3Cellipse cx=%224%22 cy=%22-4%22 rx=%2210%22 ry=%2214%22 fill=%22%233D6BFF%22/%3E%3Ccircle cx=%220%22 cy=%22-11%22 r=%224.2%22 fill=%22%23FFFFFF%22/%3E%3C/g%3E%3Cg transform=%22translate%2888 64%29 scale%281.07%29%22%3E%3Crect x=%22-17%22 y=%22-23%22 width=%2234%22 height=%2246%22 rx=%2217%22 fill=%22%23F6F3EA%22/%3E%3Cellipse cx=%224%22 cy=%22-4%22 rx=%2210%22 ry=%2214%22 fill=%22%233D6BFF%22/%3E%3Ccircle cx=%220%22 cy=%22-11%22 r=%224.2%22 fill=%22%23FFFFFF%22/%3E%3C/g%3E%3C/svg%3E">
 <style>
-:root{--bg:#0b0d12;--bg2:#10131a;--panel:#151922;--panel2:#1b2030;--line:#252b3a;--text:#eef1f7;--muted:#8b94a9;--acc:#5b8cff;--acc2:#a87bff;--ok:#38d39f;--warn:#ffb648;--bad:#ff5d6c;--r:18px;--sh:0 10px 30px rgba(0,0,0,.35);--grad:linear-gradient(135deg,var(--acc),var(--acc2))}
+:root{--bg:#0b0d12;--bg2:#10131a;--panel:#151922;--panel2:#1b2030;--line:#252b3a;--text:#eef1f7;--muted:#8b94a9;--acc:#5b8cff;--acc2:#a87bff;--ok:#38d39f;--warn:#ffb648;--bad:#ff5d6c;--r:18px;--sh:0 10px 30px rgba(0,0,0,.35)}
 @media(prefers-color-scheme:light){:root{--bg:#f3f5fa;--bg2:#e9edf5;--panel:#fff;--panel2:#f4f6fb;--line:#e1e6f0;--text:#141824;--muted:#69728a;--sh:0 8px 24px rgba(30,40,80,.08)}}
 *{box-sizing:border-box}html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
@@ -17,8 +18,9 @@ a{color:var(--acc)}
 aside{position:sticky;top:0;height:100vh;padding:22px 14px;border-right:1px solid var(--line);background:var(--bg2);display:flex;flex-direction:column;gap:6px}
 .brand{display:flex;align-items:center;gap:12px;padding:0 10px 18px}
 .brand h1{margin:0;font-size:20px;letter-spacing:.2px}
-.logo{display:flex;gap:4px}.logo i{width:15px;height:19px;border-radius:50%;background:#f6f3ea;position:relative;display:block;animation:blink 6s infinite}
-.logo i:after{content:"";position:absolute;left:4px;top:4px;width:7px;height:11px;border-radius:50%;background:var(--acc)}
+.logo{width:38px;height:38px;flex:none;filter:drop-shadow(0 4px 10px rgba(61,107,255,.25))}.logo .e{transform-box:fill-box;transform-origin:center;animation:blink 6s infinite}
+.brand small{display:block;font-size:11.5px;color:var(--muted);letter-spacing:.2px;margin-top:1px}.brand small b{color:var(--acc);font-weight:700}
+.pill.up{cursor:pointer;border-color:var(--acc);color:var(--acc)}
 @keyframes blink{0%,46%,50%,100%{transform:scaleY(1)}48%{transform:scaleY(.1)}}
 nav{display:flex;flex-direction:column;gap:3px}
 nav button{display:flex;align-items:center;gap:11px;border:0;background:none;padding:10px 12px;border-radius:12px;color:var(--muted);cursor:pointer;text-align:left;transition:background .2s,color .2s}
@@ -58,7 +60,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .sw span{position:absolute;inset:0;border-radius:99px;background:var(--line);transition:.25s;cursor:pointer}
 .sw span:before{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.25s cubic-bezier(.3,1.5,.6,1)}
 .sw input:checked+span{background:var(--acc)}.sw input:checked+span:before{transform:translateX(18px)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:12px;padding:10px 16px;background:var(--grad);color:#fff;font-weight:600;cursor:pointer;transition:transform .15s,filter .2s,box-shadow .2s;box-shadow:0 6px 18px rgba(91,140,255,.25)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:12px;padding:10px 16px;background:var(--acc);color:#fff;font-weight:600;cursor:pointer;transition:transform .15s,filter .2s,box-shadow .2s;box-shadow:0 6px 18px rgba(91,140,255,.25)}
 .btn:hover{filter:brightness(1.08);transform:translateY(-1px)}.btn:active{transform:translateY(1px)}
 .btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line);box-shadow:none}
 .btn.danger{background:rgba(255,93,108,.12);color:var(--bad);border:1px solid rgba(255,93,108,.35);box-shadow:none}
@@ -69,7 +71,7 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:7px 18px;margin:0;font-size:1
 /* ---------- dashboard */
 .dash{display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:18px;align-items:start}
 .device{display:flex;flex-direction:column;align-items:center;gap:14px}
-.bezel{position:relative;width:268px;height:268px;padding:14px;border-radius:44px;background:linear-gradient(160deg,#c49a6c,#8a6040);box-shadow:var(--sh),inset 0 2px 0 rgba(255,255,255,.25)}
+.bezel{position:relative;width:268px;height:268px;padding:14px;border-radius:44px;background:#a67c52;box-shadow:var(--sh),inset 0 2px 0 rgba(255,255,255,.25)}
 .bezel canvas{width:240px;height:240px;border-radius:30px;background:#000;display:block;image-rendering:auto}
 .bezel .live{position:absolute;top:22px;left:24px;font-size:11px;font-weight:700;letter-spacing:.6px;color:#fff;background:rgba(0,0,0,.45);padding:2px 8px;border-radius:99px;display:flex;align-items:center;gap:5px}
 .bezel .live:before{content:"";width:6px;height:6px;border-radius:50%;background:#ff4d5e;animation:pulse 1.6s infinite}
@@ -80,7 +82,7 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:7px 18px;margin:0;font-size:1
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:var(--sh)}
 .stat small{color:var(--muted);font-size:12px;display:block}.stat b{font-size:20px;display:block;margin-top:3px;font-variant-numeric:tabular-nums}
 .bars{display:grid;gap:9px}.bar{display:grid;grid-template-columns:110px 1fr;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
-.bar i{display:block;height:8px;border-radius:9px;background:var(--line);overflow:hidden}.bar i:after{content:"";display:block;height:100%;width:var(--w);background:var(--grad);border-radius:9px;transition:width .6s cubic-bezier(.3,1.2,.5,1)}
+.bar i{display:block;height:8px;border-radius:9px;background:var(--line);overflow:hidden}.bar i:after{content:"";display:block;height:100%;width:var(--w);background:var(--acc);border-radius:9px;transition:width .6s cubic-bezier(.3,1.2,.5,1)}
 /* chat */
 .chat{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:12px;height:340px;overflow:auto;display:flex;flex-direction:column;gap:6px}
 .chat .day{align-self:center;font-size:11px;color:var(--muted);margin:10px 0 4px;display:flex;align-items:center;gap:8px;width:100%}
@@ -88,7 +90,7 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:7px 18px;margin:0;font-size:1
 .msg{max-width:82%;padding:8px 12px 5px;border-radius:18px;font-size:14px;line-height:1.4;word-wrap:break-word;white-space:pre-wrap;animation:pop .25s ease}
 @keyframes pop{from{opacity:0;transform:scale(.96) translateY(4px)}to{opacity:1;transform:none}}
 .msg small{display:block;font-size:10px;opacity:.6;text-align:right;margin-top:2px}
-.msg.me{align-self:flex-end;background:var(--grad);color:#fff;border-bottom-right-radius:6px}
+.msg.me{align-self:flex-end;background:var(--acc);color:#fff;border-bottom-right-radius:6px}
 .msg.bot{align-self:flex-start;background:var(--panel2);border:1px solid var(--line);border-bottom-left-radius:6px}
 .chat .empty{color:var(--muted);text-align:center;font-size:13px;margin:auto}
 .send{display:flex;gap:8px;margin-top:10px}.send input{flex:1;min-width:0}
@@ -101,6 +103,7 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:7px 18px;margin:0;font-size:1
 .preset canvas,.facecv{display:block;width:100%;height:auto;border-radius:12px;margin-bottom:9px}
 .preset b{display:block;font-size:14.5px}.preset span{display:block;font-size:12px;color:var(--muted);line-height:1.35;margin-top:2px}
 .facecard{max-width:360px}
+.notes{white-space:pre-wrap;font:12.5px/1.5 system-ui,sans-serif;color:var(--muted);background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;max-height:220px;overflow:auto;margin:8px 0 0}
 .rev{display:grid;gap:8px}.rev div{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:8px}
 .rev audio{height:32px;flex:1;min-width:180px}.rev small{width:100%;color:var(--muted)}
 .customs{display:grid;gap:10px;margin:12px 0}.cu{border:1px solid var(--line);border-radius:14px;padding:10px;display:grid;gap:8px}
@@ -126,7 +129,7 @@ input[type=color]{width:46px;height:46px;border:0;border-radius:14px;background:
 .tile:hover{border-color:var(--acc)}
 .tile .t{display:flex;align-items:center;gap:10px}
 .tile .n{flex:1;min-width:0}.tile .n b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tile .n small{color:var(--muted);font-size:11.5px}
-.play{width:34px;height:34px;border-radius:50%;border:0;background:var(--grad);color:#fff;cursor:pointer;display:grid;place-items:center;flex:none;transition:transform .15s}
+.play{width:34px;height:34px;border-radius:50%;border:0;background:var(--acc);color:#fff;cursor:pointer;display:grid;place-items:center;flex:none;transition:transform .15s}
 .play:hover{transform:scale(1.1)}.play:active{transform:scale(.92)}
 .tile details summary{list-style:none;cursor:pointer;color:var(--muted);font-size:12px;margin-top:6px}.tile details summary::-webkit-details-marker{display:none}
 .tile details[open] summary{color:var(--acc)}.tile details .fields{grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
@@ -150,7 +153,7 @@ details.more summary{cursor:pointer;color:var(--acc);font-size:13.5px;margin:6px
 <body>
 <div class="app">
 <aside>
-  <div class="brand"><div class="logo"><i></i><i></i></div><h1 id="title">Pixel</h1></div>
+  <div class="brand"><svg class="logo" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#11141C"/><g transform="translate(40 66) scale(1)"><g class="e"><rect x="-17" y="-23" width="34" height="46" rx="17" fill="#F6F3EA"/><ellipse cx="4" cy="-4" rx="10" ry="14" fill="#3D6BFF"/><circle cx="0" cy="-11" r="4.2" fill="#fff"/></g></g><g transform="translate(88 64) scale(1.07)"><g class="e"><rect x="-17" y="-23" width="34" height="46" rx="17" fill="#F6F3EA"/><ellipse cx="4" cy="-4" rx="10" ry="14" fill="#3D6BFF"/><circle cx="0" cy="-11" r="4.2" fill="#fff"/></g></g></svg><div><h1 id="title">Pixel</h1><small><b>pixel</b> buddy <span id="prodVer"></span></small></div></div>
   <nav id="tabs">
     <button data-t="dash" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>Übersicht</button>
     <button data-t="char"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg>Charakter</button>
@@ -167,7 +170,7 @@ details.more summary{cursor:pointer;color:var(--acc);font-size:13.5px;margin:6px
 <!-- ======================================================== Übersicht -->
 <section id="dash" class="on">
   <div class="head"><div><h2>Hallo! 👋</h2><p id="greet">So geht es deinem Pixel gerade.</p></div>
-    <div class="pills"><span class="pill" id="pState"><span class="dot"></span>…</span><span class="pill" id="pWifi"><span class="dot"></span>WLAN</span><span class="pill" id="pSd"><span class="dot"></span>SD</span></div></div>
+    <div class="pills"><span class="pill" id="pState"><span class="dot"></span>…</span><span class="pill" id="pWifi"><span class="dot"></span>WLAN</span><span class="pill" id="pSd"><span class="dot"></span>SD</span><span class="pill up" id="pUp" style="display:none" onclick="go('sys')"></span></div></div>
   <div class="stats">
     <div class="stat"><small>Gespräch</small><b id="sLive">–</b></div>
     <div class="stat"><small>Gerade</small><b id="sBeh">–</b></div>
@@ -366,7 +369,13 @@ details.more summary{cursor:pointer;color:var(--acc);font-size:13.5px;margin:6px
         <p class="hint" style="margin-top:8px">Stimmt die automatische Einordnung? „Pixel“ kommt ins Training als Aktivierungswort, „kein Pixel“ als Gegenbeispiel.</p>
         <select id="revKind" onchange="revN=12;revList()" style="margin:8px 0"><option value="auto">Automatisch, noch nicht geprüft</option><option value="ap">Automatisch: „Pixel“</option><option value="fa">Automatisch: Fehlauslösungen</option><option value="v">Geprüft</option><option value="pos">Selbst aufgenommen: „Pixel“</option><option value="bg">Umgebung</option></select>
         <div id="revList" class="rev"></div><button class="btn ghost sm" id="revMore" onclick="revN+=12;revList()">Mehr zeigen</button></details></div>
-    <div class="card"><h3>Firmware-Update</h3><p class="hint">Die Datei <code>firmware.bin</code> (oder <code>pixel-update.bin</code>) – ohne Kabel. Startet das neue Programm nicht sauber, kehrt Pixel von selbst zum alten zurück.</p>
+    <div class="card"><h3>Updates</h3><p class="hint" id="upInfo">Neue Versionen kommen von GitHub. Startet eine neue Version nicht sauber, kehrt Pixel von selbst zur alten zurück.</p>
+      <div class="toggle">Automatisch aktualisieren<label class="sw"><input type="checkbox" data-k="update.auto"><span></span></label></div>
+      <label class="f" style="margin-top:8px"><span class="row">Um</span><input type="time" data-k="update.at" style="width:auto"></label>
+      <div class="row2" style="margin-top:12px"><button class="btn" id="upCheck" onclick="upCheck()">Nach Updates suchen</button><button class="btn ghost" id="upInstall" style="display:none" onclick="upInstall()">Jetzt installieren</button></div>
+      <div class="bar" id="upBar" style="display:none;margin-top:12px"><i style="--w:0%"></i></div>
+      <p class="hint" id="upState" style="margin-top:10px"></p><pre class="notes" id="upNotes" style="display:none"></pre></div>
+    <div class="card"><h3>Firmware von Hand</h3><p class="hint">Die Datei <code>pixel-update.bin</code> (oder <code>firmware.bin</code>) – ohne Kabel. Startet das neue Programm nicht sauber, kehrt Pixel von selbst zum alten zurück.</p>
       <label class="btn ghost">Firmware wählen<input type="file" accept=".bin" hidden onchange="ota(this)"></label><p class="hint" id="otaInfo" style="margin-top:10px"></p></div>
     <div class="card"><h3>Einstellungen</h3><p class="hint">Sichern, übertragen oder zurücksetzen. Vor jedem Firmware-Update legt Pixel selbst eine Sicherung auf der SD-Karte an (ohne Schlüssel).</p>
       <p class="hint" id="bakInfo"></p><div class="row2" style="margin-bottom:10px"><button class="btn ghost" onclick="api('POST','/api/backup').then(bakShow).then(()=>toast('Gesichert'))">Jetzt auf SD sichern</button>
@@ -383,7 +392,7 @@ details.more summary{cursor:pointer;color:var(--acc);font-size:13.5px;margin:6px
 <div class="toast" id="toast">Gespeichert</div>
 <div class="banner" id="offline">Pixel ist gerade nicht erreichbar – startet er neu? Die Seite lädt von selbst neu, sobald er wieder da ist.</div>
 <script>
-const LABEL={happy:'Fröhlich',love:'Verliebt',surprised:'Überrascht',sleepy:'Müde',dizzy:'Schwindelig',curious:'Neugierig',wink:'Zwinkern',grumpy:'Grummelig',sad:'Traurig',suspicious:'Misstrauisch',giggle:'Kichern',jelly:'Wabbeln',starstruck:'Sternaugen',"cross-eyed":'Schielen',"eye roll":'Augenrollen',shy:'Verlegen',yawn:'Gähnen',"look around":'Umherschauen',boop:'Antippen',pet:'Streicheln',yes:'Ja (nicken)',no:'Nein (schütteln)',"dont know":'Weiß nicht',cry:'Weinen',scared:'Angst',proud:'Stolz',hello:'Hallo',"falling asleep":'Einschlafen',glance:'Seitenblick',drift:'Verlagern',focus:'Fokussieren',pursuit:'Etwas verfolgen',dance:'Tanzen',offline:'Kein WLAN',quota:'Limit erreicht',cant:'Kann ich nicht',huh:'Nicht verstanden',locked:'Kein Zugang',glitch:'Störung',light_on:'Licht an',light_off:'Licht aus',light_color:'Lichtfarbe',timer:'Timer gestellt',alarm:'Wecker klingelt',weather:'Wetter',wander:'Umherwandern',peek:'Hervorlugen',"come closer":'Näherkommen',bounce:'Hüpfen',squish:'Quetschen',sway:'Schaukeln',battery:'Akku'};
+const LABEL={happy:'Fröhlich',love:'Verliebt',surprised:'Überrascht',sleepy:'Müde',dizzy:'Schwindelig',curious:'Neugierig',wink:'Zwinkern',grumpy:'Grummelig',sad:'Traurig',suspicious:'Misstrauisch',giggle:'Kichern',jelly:'Wabbeln',starstruck:'Sternaugen',"cross-eyed":'Schielen',"eye roll":'Augenrollen',shy:'Verlegen',yawn:'Gähnen',"look around":'Umherschauen',boop:'Antippen',pet:'Streicheln',yes:'Ja (nicken)',no:'Nein (schütteln)',"dont know":'Weiß nicht',cry:'Weinen',scared:'Angst',proud:'Stolz',hello:'Hallo',"falling asleep":'Einschlafen',glance:'Seitenblick',drift:'Verlagern',focus:'Fokussieren',pursuit:'Etwas verfolgen',dance:'Tanzen',offline:'Kein WLAN',quota:'Limit erreicht',cant:'Kann ich nicht',huh:'Nicht verstanden',locked:'Kein Zugang',glitch:'Störung',light_on:'Licht an',light_off:'Licht aus',light_color:'Lichtfarbe',timer:'Timer gestellt',alarm:'Wecker klingelt',weather:'Wetter',wander:'Umherwandern',peek:'Hervorlugen',"come closer":'Näherkommen',bounce:'Hüpfen',squish:'Quetschen',sway:'Schaukeln',battery:'Akku',idle:'Entspannt'};
 const GROUPS=[['idle','Von selbst'],['reaction','Gefühle & Reaktionen'],['touch','Berührung'],['home','Zuhause & Infos'],['error','Probleme']];
 const QUICK=['hello','happy','love','dance','wander','peek','come closer','bounce','giggle','surprised'];
 const CW={porcelain:0,gumball:1,grape:2,marmalade:3,mint:4,bubblegum:5,lemon:6,ocean:7,classic:8,lime:9};
@@ -574,7 +583,8 @@ function status(){api('GET','/api/status').then(s=>{
   $('#sLive').textContent=ST[s.live]||s.live;$('#sBeh').textContent=LABEL[s.behavior]||s.behavior;$('#sCost').textContent='$'+s.usd_today.toFixed(2);
   $('#sTimers').textContent=s.timers||'keine';$('#sFps').textContent=s.fps+' fps';
   $('#sBatT').style.display=s.battery>=0?'':'none';$('#sBat').textContent=s.battery+' %'+(s.charging?' ⚡':'');$('#ring').style.display=s.ringing?'block':'none';
-  $('#foot').textContent=`${s.ip} · ${s.slot}`;
+  $('#foot').textContent=`${s.ip} · ${s.slot}`;$('#prodVer').textContent=s.version||'';
+  $('#pUp').style.display=s.update?'':'none';$('#pUp').textContent=`✨ Update ${s.update} verfügbar`;
   $('#cost').innerHTML=[['Heute','$'+s.usd_today.toFixed(2)],['Diesen Monat','$'+s.usd_month.toFixed(2)]].map(([a,b])=>`<dt>${a}</dt><dd>${b}</dd>`).join('');
   $('#wifiInfo').textContent=s.setup?'Einrichtung läuft – QR-Code auf dem Display scannen.':`Verbunden mit „${s.ssid}“ (${s.rssi} dBm), Adresse ${s.ip}.`;
   $('#st').innerHTML=[['Laufzeit',Math.floor(s.uptime/3600)+' h '+Math.floor(s.uptime%3600/60)+' min'],['Freier RAM',Math.round(s.heap/1024)+' KB intern · '+Math.round(s.psram/1024)+' KB PSRAM'],['Nachtmodus',s.night?'aktiv':'aus'],['Firmware',s.build+' ('+s.slot+')']].map(([a,b])=>`<dt>${a}</dt><dd>${b}</dd>`).join('');
@@ -585,6 +595,18 @@ function haTest(){const e=$('#ha');e.style.display='block';e.textContent='verbin
   api('GET','/api/ha/test').then(j=>{e.textContent=j.devices<0?'Keine Verbindung – Adresse und Token prüfen.':j.devices+' Geräte gefunden:\n\n'+j.list.split('\n').map(l=>l.split('|').slice(0,2).reverse().join('  ·  ')).join('\n')})}
 function lights(){api('GET','/api/ha/test').then(j=>{if(j.devices<0)return;
   $('#lights').innerHTML=j.list.split('\n').filter(l=>l.startsWith('light.')).map(l=>`<option value="${l.split('|')[0]}">${l.split('|')[1]}</option>`).join('')}).catch(()=>{})}
+// ---------- updates from GitHub
+let upT=null;
+function upShow(j){if(!j)return api('GET','/api/update').then(upShow).catch(()=>{});
+  const st={idle:'',checking:'Suche auf GitHub …',up_to_date:`Alles aktuell – ${j.current} ist die neueste Version.`,available:`Neue Version ${j.latest} verfügbar (installiert: ${j.current}).`,
+    downloading:`Lade Version ${j.latest} … ${j.progress} %`,done:'Installiert – Pixel startet neu …',failed:'Ging gerade nicht: '+(j.error||'unbekannt')}[j.state]||'';
+  $('#upState').textContent=st||`Installiert: Version ${j.current}.`;$('#upInstall').style.display=j.state==='available'?'':'none';
+  $('#upInstall').textContent=`Version ${j.latest} installieren`;$('#upCheck').disabled=j.state==='checking'||j.state==='downloading';
+  $('#upBar').style.display=j.state==='downloading'?'':'none';$('#upBar i').style.setProperty('--w',j.progress+'%');
+  $('#upNotes').style.display=j.state==='available'&&j.notes?'':'none';$('#upNotes').textContent=(j.notes||'').replace(/<[^>]+>/g,'').trim().slice(0,1500);
+  clearTimeout(upT);if(j.state==='checking'||j.state==='downloading')upT=setTimeout(()=>upShow(),800)}
+function upCheck(){api('POST','/api/update/check').then(()=>setTimeout(()=>upShow(),300))}
+function upInstall(){if(confirm('Neue Version installieren? Pixel lädt sie herunter und startet danach neu (etwa 1 Minute).'))api('POST','/api/update/install').then(()=>setTimeout(()=>upShow(),300))}
 function bakShow(){return api('GET','/api/backup').then(b=>{$('#bakInfo').textContent=b.exists?`Sicherung auf der SD-Karte: ${b.saved>1.7e9?new Date(b.saved*1000).toLocaleString('de-DE'):'Datum unbekannt'} (Firmware ${b.build}).`:'Noch keine Sicherung auf der SD-Karte.';$('#bakRestore').style.display=b.exists?'':'none'}).catch(()=>{})}
 function kwsList(){api('GET','/api/kws/list').then(l=>{const c=k=>l.filter(n=>n.startsWith(k)).length;$('#kwsInfo').textContent=`${c('pos')} Aufnahmen „Pixel“, ${c('bg')} Umgebung, automatisch: ${c('ap')} × „Pixel“ und ${c('fa')} Fehlauslösungen, ${c('pv')+c('nv')} geprüft – ${l.length} von 800.`+(l.length>=800?' Voll: es kommen keine neuen dazu.':'')}).catch(()=>{})}
 let revN=12;
@@ -620,7 +642,7 @@ function ota(inp){const f=inp.files[0];if(!f)return;const e=$('#otaInfo');if(!co
 function exportCfg(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(C,null,2)],{type:'application/json'}));a.download='pixel-config.json';a.click()}
 function importCfg(i){i.files[0].text().then(t=>api('POST','/api/config',JSON.parse(t))).then(load).then(()=>toast('Importiert'))}
 $$('#tabs button').forEach(b=>b.onclick=()=>{$$('#tabs button,section').forEach(e=>e.classList.remove('on'));b.classList.add('on');$('#'+b.dataset.t).classList.add('on');
-  if(b.dataset.t==='sys'){kwsList();bakShow()}if(b.dataset.t==='home')lights();if(b.dataset.t==='dash')loadLog(true);scrollTo(0,0)});
+  if(b.dataset.t==='sys'){kwsList();bakShow();upShow()}if(b.dataset.t==='home')lights();if(b.dataset.t==='dash')loadLog(true);scrollTo(0,0)});
 const h=new Date().getHours();$('#greet').textContent=(h<11?'Guten Morgen':h<18?'Hallo':'Guten Abend')+' – so geht es deinem Pixel gerade.';
 load().then(()=>loadLog(true));status();setInterval(status,2000);setInterval(preview,220);
 </script>

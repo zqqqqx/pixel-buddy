@@ -8,6 +8,8 @@ void show(const char* title, const char* qr, const char* line1, const char* line
 // buttons to tap (up to 4); danger: index drawn in red, -1 none
 void menu(const char* title, const char* const* items, int n, int danger);
 int hit(int x, int y);  // menu button under a tap, -1 = none
+// the brand page: the Pixel Buddy eyes, a title, a line below; pct >= 0 adds a progress bar (updates)
+void splash(const char* title, const char* line, int pct = -1);
 void hide();
 bool active();
 uint32_t version();  // changes whenever the page changes (redraw)

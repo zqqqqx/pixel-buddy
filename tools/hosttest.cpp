@@ -10,6 +10,7 @@
 #include "net.h"
 #include "sched.h"
 #include "beat.h"
+#include "update.h"
 #include <math.h>
 
 int main() {
@@ -64,6 +65,13 @@ int main() {
     Beat slow = run(55, 0);  // every other beat only (the snare through a small speaker): nods at half the tempo
     assert(slow.conf > 0.5f && fabsf(slow.bpm() - 55) < 4);
   }
+
+  // update versions: numbers, not text ("1.10" is newer than "1.9"), a leading v and a suffix do not matter
+  assert(update::compare("v1.10.0", "1.9.9") > 0);
+  assert(update::compare("1.1.0", "v1.1.0") == 0);
+  assert(update::compare("1.1", "1.1.0") == 0);
+  assert(update::compare("1.1.0", "1.1.1") < 0);
+  assert(update::compare("2.0.0-beta", "1.99.0") > 0);
 
   // captive portal DNS: the answer must go right after the question, also with an EDNS0 record behind it
   const unsigned char q[] = {0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1,                // header, 1 additional

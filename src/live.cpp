@@ -52,6 +52,8 @@
 #include "creds.h"
 #include "settings.h"
 #include "battery.h"
+#include "update.h"
+#include "version.h"
 
 namespace live {
 
@@ -997,9 +999,11 @@ static const char* SYSTEM_FN =
     "{\"type\":\"function\",\"name\":\"system\",\"description\":\"Selbstverwaltung. status = Zustand (WLAN, "
     "Laufzeit, Speicher, Kosten, Timer); sleep = einschlafen; night_on / night_off = Nachtmodus. NUR wenn der Nutzer es "
     "ausdruecklich verlangt: privacy = nicht mehr zuhoeren bis zur naechsten Beruehrung, restart = neu starten, "
-    "shutdown = ausschalten, clear_history = Gespraechsverlauf loeschen.\","
+    "shutdown = ausschalten, clear_history = Gespraechsverlauf loeschen, update_install = die neue Version von GitHub "
+    "installieren (er startet danach neu). update_check = nach einer neuen Version suchen (jederzeit).\","
     "\"parameters\":{\"type\":\"object\",\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"status\","
-    "\"sleep\",\"night_on\",\"night_off\",\"privacy\",\"restart\",\"shutdown\",\"clear_history\"]}},\"required\":[\"action\"]}}";
+    "\"sleep\",\"night_on\",\"night_off\",\"privacy\",\"restart\",\"shutdown\",\"clear_history\",\"update_check\","
+    "\"update_install\"]}},\"required\":[\"action\"]}}";
 
 static const char* SET_LIGHT =
     "{\"type\":\"function\",\"name\":\"set_light\",\"description\":\"Schaltet eine Lampe ein oder aus und "
@@ -1461,7 +1465,7 @@ static void systemStatus(char* out, int cap) {
   char tl[200];
   assist::listTimers(tl, sizeof(tl));
   snprintf(out, cap,
-           "Laufzeit %lld h %lld min, WLAN %s (Signal %d dBm, IP %s), Firmware vom %s, freier Speicher %u KB intern / "
+           "Pixel Buddy Version " PIXEL_VERSION ", Laufzeit %lld h %lld min, WLAN %s (Signal %d dBm, IP %s), Firmware vom %s, freier Speicher %u KB intern / "
            "%u KB PSRAM, Kosten heute etwa %.2f Dollar, diesen Monat %.2f Dollar, %s Nachtmodus %s, %s.",
            up / 60, up % 60, net::ssid(), net::rssi(), net::ip(), esp_app_get_description()->date,
            (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
@@ -1601,6 +1605,29 @@ static void runTool(const ToolCall& c, char* result, int cap) {
     } else if (!strcmp(act, "night_on") || !strcmp(act, "night_off")) {
       settings::apply(!strcmp(act, "night_on") ? "{\"night\":{\"on\":true}}" : "{\"night\":{\"on\":false}}");
       snprintf(result, cap, "{\"ok\":true}");
+    } else if (!strcmp(act, "update_check") || !strcmp(act, "update_install")) {
+      // look on GitHub (a few seconds), then report - or install it once the goodbye is said
+      if (update::state() != update::AVAILABLE) {
+        update::check(false);
+        vTaskDelay(pdMS_TO_TICKS(300));
+        for (int k = 0; k < 100 && update::state() == update::CHECKING; ++k) vTaskDelay(pdMS_TO_TICKS(200));
+      }
+      char r[300];
+      update::State us = update::state();
+      if (us == update::AVAILABLE && !strcmp(act, "update_install")) {
+        snprintf(pendingSys, sizeof(pendingSys), "update");
+        pendingSysAt = esp_timer_get_time();
+        snprintf(r, sizeof(r), "Version %s wird gleich installiert, danach startest du neu. Sag nur ganz kurz tschuess.",
+                 update::latest());
+      } else if (us == update::AVAILABLE) {
+        snprintf(r, sizeof(r), "Neue Version %s verfuegbar (installiert ist %s). Installieren nur, wenn der Nutzer es "
+                 "ausdruecklich sagt.", update::latest(), PIXEL_VERSION);
+      } else if (us == update::UP_TO_DATE) {
+        snprintf(r, sizeof(r), "Alles aktuell: Version %s ist die neueste.", PIXEL_VERSION);
+      } else {
+        snprintf(r, sizeof(r), "Konnte gerade nicht nach Updates suchen (GitHub nicht erreichbar).");
+      }
+      toolResult(result, cap, us != update::FAILED, r);
     } else if (!strcmp(act, "clear_history")) {
       remove("/sdcard/pixel/chat.log");
       forgetFlag = true;

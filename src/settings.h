@@ -41,6 +41,8 @@ int brightness();                    // 0..100
 void leds(int& mode, int& bright);   // LEDs: 0 off, 1 status, 2 status + glow; brightness 0..100
 int fps();
 int displayOffMin();
+bool updateAuto();                   // install new versions from GitHub by itself
+int updateAt();                      // ... at this minute of the day
 int customCount();                   // own animations (sequences of up to 6 steps)
 const char* customName(int i);
 int custom(const char* name, int* beh); // the steps (behaviour indices) of the one with this name, 0 = none

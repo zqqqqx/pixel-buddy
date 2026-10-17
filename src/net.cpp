@@ -174,9 +174,16 @@ static void wifiStart() {
     nvs_get_str(h, "pass", staPass, &n);
     nvs_close(h);
   }
-  if (!staSsid[0]) {  // nothing from the setup: the network built into the firmware, if any
+  if (!staSsid[0] && WIFI_SSID[0]) {  // nothing from the setup: the network built into the firmware
     snprintf(staSsid, sizeof(staSsid), "%s", WIFI_SSID);
     snprintf(staPass, sizeof(staPass), "%s", WIFI_PASS);
+    // kept like one from the setup: an update from GitHub (built without secrets.h) still knows it
+    if (nvs_open("pixel_wifi", NVS_READWRITE, &h) == ESP_OK) {
+      nvs_set_str(h, "ssid", staSsid);
+      nvs_set_str(h, "pass", staPass);
+      nvs_commit(h);
+      nvs_close(h);
+    }
   }
   esp_netif_init();
   esp_event_loop_create_default();

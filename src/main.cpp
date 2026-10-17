@@ -48,6 +48,8 @@
 #include "leds.h"
 #include "screen.h"
 #include "battery.h"
+#include "update.h"
+#include "version.h"
 #include <time.h>
 
 static const char* TAG = "eyes";
@@ -480,6 +482,7 @@ static void runLive() {
         printf("self management: %s\n", ev.name);
         if (!strcmp(ev.name, "shutdown")) shutdown();
         if (!strcmp(ev.name, "sleep")) eyes::trigger(eyes::behaviorIndex("falling asleep"));
+        if (!strcmp(ev.name, "update")) update::install();  // asked for by voice, after the goodbye
         if (!strcmp(ev.name, "ringstop")) ringStop(false);
         if (!strcmp(ev.name, "privacy")) {
           privacy = true;
@@ -735,14 +738,16 @@ static void publishStatus(float fps) {
            "{\"ip\":\"%s\",\"ssid\":\"%s\",\"rssi\":%d,\"uptime\":%lld,\"fps\":%.0f,\"behavior\":\"%s\","
            "\"colorway\":\"%s\",\"live\":\"%s\",\"heap\":%u,\"psram\":%u,\"sd\":%s,\"build\":\"%s %s\","
            "\"usd_today\":%.3f,\"usd_month\":%.3f,\"timers\":%d,\"night\":%s,\"privacy\":%s,\"setup\":%s,"
-           "\"ringing\":%s,\"slot\":\"%s\",\"display\":%d,\"battery\":%d,\"charging\":%s}",
+           "\"ringing\":%s,\"slot\":\"%s\",\"display\":%d,\"battery\":%d,\"charging\":%s,\"version\":\"%s\","
+           "\"update\":\"%s\"}",
            net::ip(), net::ssid(), net::rssi(), esp_timer_get_time() / 1000000, fps, eyes::currentName(),
            eyes::colorwayName(), PH[(int)live::phase()], (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM), sd::ok() ? "true" : "false", app->date, app->time,
            assist::today(), assist::month(), assist::timerCount(), night ? "true" : "false",
            privacy ? "true" : "false", net::setupActive() ? "true" : "false", ringUntil ? "true" : "false",
            esp_ota_get_running_partition()->label, (int)(backlight * 100.f + 0.5f), battery::level(),
-           battery::charging() ? "true" : "false");
+           battery::charging() ? "true" : "false", PIXEL_VERSION,
+           update::state() == update::AVAILABLE ? update::latest() : "");
   web::setStatus(j);
 }
 
@@ -872,6 +877,16 @@ static void houseKeeping(int64_t now) {
   bool n = c.nightOn && t > 1700000000 &&
            (c.nightFrom > c.nightTo ? (h >= c.nightFrom || h < c.nightTo) : (h >= c.nightFrom && h < c.nightTo));
   if (n != night) appliedVersion = 0;  // re-apply the settings (brightness, idle pauses)
+  // updates from GitHub at the set time (within half an hour, once a day, not in the middle of anything)
+  int upAt = settings::updateAt();
+  int nowMin = h * 60 + tmv.tm_min, late = (nowMin - upAt + 1440) % 1440;
+  static int upDay = -1;
+  if (settings::updateAuto() && t > 1700000000 && late < 30 && upDay != tmv.tm_yday && !live::active() && !ringUntil &&
+      !menuOpen && net::connected()) {
+    upDay = tmv.tm_yday;
+    printf("update: daily check\n");
+    update::check(true);
+  }
   static int lastSched = -2;  // the schedule reached its next step
   int sb = -1, sv = -1;
   int sched = t > 1700000000 && settings::scheduled(h * 60 + tmv.tm_min, sb, sv) ? sb * 1000 + sv : -1;
@@ -907,10 +922,11 @@ static void houseKeeping(int64_t now) {
 
 // ============================================================== main loop
 static void frameTask(void*) {
-  // black screen first, then fade the backlight in
+  // black screen first, then the brand page fades in; after it the eyes wake up
   clearMode = true;
   drawRect({0, 0, 240, 240});
   clearMode = false;
+  screen::splash("PIXEL BUDDY", PIXEL_VERSION);
 
   int64_t last = esp_timer_get_time(), statT = last, bootT = last, statusT = last;
   float lastFps = 0;
@@ -952,6 +968,12 @@ static void frameTask(void*) {
     }
 
     float since = (now - bootT) * 1e-6f;
+    static bool splashOn = true;
+    if (splashOn && since > 2.2f) {
+      splashOn = false;
+      if (!net::setupActive() && !menuOpen && update::state() != update::DOWNLOADING) screen::hide();
+      eyes::trigger(eyes::behaviorIndex("wake up"));
+    }
     static bool valid = false;  // 10 s of eyes: this firmware works, no rollback to the previous one
     if (!valid && since > 10.f) {
       valid = true;

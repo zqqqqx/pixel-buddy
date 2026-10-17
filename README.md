@@ -1,4 +1,7 @@
-# Pixel – animierte Augen mit Sprachassistent
+<p align="center"><img src="docs/wordmark.svg" width="380" alt="Pixel Buddy"></p>
+<p align="center"><b>Der kleine Freund mit großen Augen.</b></p>
+
+# Pixel Buddy – animierte Augen mit Sprachassistent
 
 Firmware für das Spotpear ESP32-S3 „muma“ Board (1,54″-Display 240×240 mit Touch, Mikrofon, Lautsprecher,
 microSD). Pixel hat selbst gerenderte Augen, hört auf „Pixel“ (eigenes Netz, offline) und redet live über
@@ -95,6 +98,21 @@ Weitere Extras:
   auch per Sprache abrufbar.
 - Charakter als Datei sichern und laden; „Rückgängig“ nach dem Übernehmen einer Persönlichkeit.
 - Vor jedem Firmware-Update sichert Pixel die Einstellungen auf der SD-Karte (Gerät → „Sicherung wiederherstellen“).
+
+## Updates
+
+Pixel Buddy holt sich neue Versionen selbst von GitHub (die neueste Version unter [Releases](../../releases), Datei
+`pixel-update.bin`): jede Nacht um 3:30 Uhr, wenn gerade niemand mit ihm redet – Uhrzeit und An/Aus unter
+Webinterface → Gerät → Updates. Dort auch „Nach Updates suchen“, oder per Sprache: „Pixel, gibt es ein Update?“ /
+„Installier das Update“ (installiert nur auf ausdrücklichen Wunsch). Vorher sichert er die Einstellungen auf der
+SD-Karte; startet die neue Version nicht sauber, kehrt er von selbst zur alten zurück.
+
+Eine neue Version veröffentlichen: `PIXEL_VERSION` in `src/version.h` erhöhen, committen, `tools/release.sh`.
+Eigene Forks: `PIXEL_REPO` in `src/version.h` auf das eigene Repository setzen. WLAN und OpenAI-Key aus
+`secrets.h` übernimmt Pixel beim ersten Start in den internen Speicher, damit sie auch nach einem Update aus dem
+öffentlichen Build erhalten bleiben.
+
+Marke, Logo, Farben: [docs/brand.md](docs/brand.md).
 
 ## Kosten
 

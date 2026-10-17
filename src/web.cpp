@@ -23,6 +23,7 @@
 #include <initializer_list>
 #include <sys/stat.h>
 #include "settings.h"
+#include "update.h"
 #include "esp_app_desc.h"
 #include "web_ui.h"
 #include "eyes.h"
@@ -336,6 +337,21 @@ static esp_err_t hNotFound(httpd_req_t* r, httpd_err_code_t) {
 }
 
 // ---- firmware update: the .bin from the build (web interface -> System)
+// ---- updates from GitHub: state, look now, install what was found
+static esp_err_t hUpdate(httpd_req_t* r) {
+  char j[900];
+  update::json(j, sizeof(j));
+  return sendJson(r, j);
+}
+static esp_err_t hUpdateCheck(httpd_req_t* r) {
+  update::check(false);
+  return hUpdate(r);
+}
+static esp_err_t hUpdateInstall(httpd_req_t* r) {
+  update::install();
+  return hUpdate(r);
+}
+
 // ---- settings backup on the SD card: made before every firmware update (and on request)
 static void backupNow() {
   const esp_app_desc_t* a = esp_app_get_description();
@@ -471,6 +487,9 @@ void start() {
       {"/api/kws/clear", HTTP_POST, guarded, (void*)hKwsClear},
       {"/api/kws/mark", HTTP_POST, guarded, (void*)hKwsMark},
       {"/api/backup", HTTP_GET, hBackupInfo, nullptr},
+      {"/api/update", HTTP_GET, hUpdate, nullptr},
+      {"/api/update/check", HTTP_POST, guarded, (void*)hUpdateCheck},
+      {"/api/update/install", HTTP_POST, guarded, (void*)hUpdateInstall},
       {"/api/backup", HTTP_POST, guarded, (void*)hBackupSave},
       {"/api/backup/restore", HTTP_POST, guarded, (void*)hBackupRestore},
       {"/setup", HTTP_GET, hSetup, nullptr},

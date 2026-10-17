@@ -74,6 +74,8 @@ struct All {
   int brightness, fps;
   int ledMode, ledBright;
   int offMin;                     // display off after this many minutes without anyone (0 = never)
+  bool upAuto;                    // updates from GitHub by itself ...
+  int upAt;                       // ... at this minute of the day
   bool schedOn;                   // brightness by time of day
   int schedN, schedAt[8], schedB[8], schedV[8];  // from minute schedAt (of the day): brightness, volume (-1 = as set)
   int cuN, cuLen[8];              // own animations: a name and up to 6 steps (animation names)
@@ -114,6 +116,8 @@ static void defaults() {
   S.fps = CFG_MAX_FPS;
   S.ledMode = 1;
   S.ledBright = 40;
+  S.upAuto = true;
+  S.upAt = 3 * 60 + 30;  // at night, when nobody talks to it
   S.schedN = 3;  // an example, off until switched on
   S.schedAt[0] = 7 * 60, S.schedB[0] = 100, S.schedV[0] = -1;
   S.schedAt[1] = 19 * 60, S.schedB[1] = 60, S.schedV[1] = -1;
@@ -245,6 +249,12 @@ static cJSON* build(bool withMeta) {
     cJSON_AddNumberToObject(o, "v", S.schedV[i]);
     cJSON_AddItemToArray(sc, o);
   }
+
+  cJSON* up = cJSON_AddObjectToObject(r, "update");
+  cJSON_AddBoolToObject(up, "auto", S.upAuto);
+  char upAt[24];
+  snprintf(upAt, sizeof(upAt), "%02d:%02d", S.upAt / 60, S.upAt % 60);
+  cJSON_AddStringToObject(up, "at", upAt);
 
   cJSON* cu = cJSON_AddArrayToObject(r, "custom");
   for (int i = 0; i < S.cuN; ++i) {
@@ -405,6 +415,14 @@ static void merge(const cJSON* j) {
         S.schedB[S.schedN++] = b < 0 ? 0 : b > 100 ? 100 : b;
       }
     }
+  }
+  const cJSON* up = cJSON_GetObjectItem(j, "update");
+  if (up) {
+    flag(up, "auto", S.upAuto);
+    const cJSON* at = cJSON_GetObjectItem(up, "at");
+    int hh, mm;
+    if (cJSON_IsString(at) && sscanf(at->valuestring, "%d:%d", &hh, &mm) == 2 && hh >= 0 && hh < 24 && mm >= 0 && mm < 60)
+      S.upAt = hh * 60 + mm;
   }
   const cJSON* cu = cJSON_GetObjectItem(j, "custom");
   if (cJSON_IsArray(cu)) {  // replaced as a whole
@@ -572,6 +590,9 @@ void init() {
     free(t);
   }
   loadKeys();
+  // a key built into the firmware (secrets.h) moves into NVS with the save below: an update from GitHub (built
+  // without secrets.h) still has it
+  if (!S.c.apiKey[0] && OPENAI_API_KEY[0]) snprintf(S.c.apiKey, sizeof(S.c.apiKey), "%s", OPENAI_API_KEY);
   save();  // the defaults, or the file without the keys
 }
 
@@ -603,6 +624,8 @@ void leds(int& mode, int& bright) {
 }
 int fps() { return S.fps; }
 int displayOffMin() { return S.offMin; }
+bool updateAuto() { return S.upAuto; }
+int updateAt() { return S.upAt; }
 int customCount() { return S.cuN; }
 const char* customName(int i) { return i >= 0 && i < S.cuN ? S.cuName[i] : ""; }
 int custom(const char* name, int* beh) {

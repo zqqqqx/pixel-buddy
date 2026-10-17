@@ -19,6 +19,8 @@ inline bool askedFor(const char* action, const char* said) {
       {"clear_history", {"verlauf+l\xc3\xb6sch", "verlauf+loesch", "verlauf+vergiss", "protokoll+l\xc3\xb6sch",
                          "protokoll+loesch", "gespr\xc3\xa4" "ch+l\xc3\xb6sch", "gespraech+loesch", "vergiss+alles"}},
       {"forget_all", {"vergiss+alles", "l\xc3\xb6sch+alles", "loesch+alles"}},
+      // installing restarts it: only on "installier ...", "aktualisier dich", "mach / spiel / lad das update"
+      {"update_install", {"installier", "aktualisier", "update+mach", "update+spiel", "update+lad", "update+starte"}},
       // "ruhe" ends a conversation, it must not switch off listening
       {"privacy", {"h\xc3\xb6r", "hoer", "zuh\xc3\xb6r", "privat", "mikro", "lausch"}},
   };
