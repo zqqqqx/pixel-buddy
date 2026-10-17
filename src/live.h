@@ -25,6 +25,7 @@ bool popEvent(Event& e);
 void forget();                      // the chat log was cleared: the next session starts without history
 void say(const char* text);         // typed in the web interface: sent as the person's turn (session follows)
 void interrupt();                   // touched while it talks: stop the answer
-void requestWeather();              // show the current weather (Home Assistant) on the eyes
+void requestWeather();
+void rest();                        // close the warm connections for a while (an update needs the memory)              // show the current weather (Home Assistant) on the eyes
 
 }  // namespace live

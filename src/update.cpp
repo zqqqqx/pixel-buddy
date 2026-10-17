@@ -13,6 +13,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "live.h"
 #include "screen.h"
 #include "settings.h"
 #include "version.h"
@@ -22,7 +23,7 @@ namespace update {
 static const char* TAG = "update";
 static volatile State st = IDLE;
 static volatile int prog = 0;
-static volatile bool busy = false, autoInstall = false, installReq = false, psramStack = false;
+static volatile bool busy = false, autoInstall = false, installReq = false;
 static char ver[24] = "", url[512] = "", notes[600] = "", err[96] = "";
 
 // the latest release: its version, notes and the update file
@@ -138,7 +139,23 @@ static bool doInstall() {
   return true;
 }
 
-// flash writes need an internal-RAM stack, so a short-lived task of its own
+// Looking runs in a task with its stack in PSRAM. Installing writes the flash, that needs a stack in internal
+// RAM: the warm conversation connections are closed first to make room for it.
+static void installTask(void*) {
+  doInstall();  // restarts the robot when it worked
+  busy = false;
+  vTaskDelete(nullptr);
+}
+static void spawnInstall() {
+  live::rest();
+  for (int k = 0; k < 40 && heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < 8192; ++k) vTaskDelay(pdMS_TO_TICKS(100));
+  if (xTaskCreatePinnedToCore(installTask, "update_ota", 6144, nullptr, 4, nullptr, 0) == pdPASS) return;
+  snprintf(err, sizeof(err), "zu wenig freier Speicher (%u Bytes am Stueck) - nach einem Neustart klappt es",
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  ESP_LOGW(TAG, "%s", err);
+  st = FAILED;
+  busy = false;
+}
 static void task(void*) {
   if (!installReq) {
     st = CHECKING;
@@ -146,29 +163,21 @@ static void task(void*) {
     st = !ok ? FAILED : compare(ver, PIXEL_VERSION) > 0 ? AVAILABLE : UP_TO_DATE;
     ESP_LOGI(TAG, "latest on GitHub: %s (this one %s)%s%s", ver[0] ? ver : "?", PIXEL_VERSION, err[0] ? " - " : "", err);
   }
-  if (st == AVAILABLE && (autoInstall || installReq)) doInstall();
-  ESP_LOGI(TAG, "stack left: %u bytes", (unsigned)uxTaskGetStackHighWaterMark(nullptr));
+  bool inst = st == AVAILABLE && (autoInstall || installReq);
   installReq = false;
   autoInstall = false;
-  busy = false;
-  if (psramStack)
-    vTaskDeleteWithCaps(nullptr);
+  if (inst)
+    spawnInstall();  // busy stays set until the install task is through
   else
-    vTaskDelete(nullptr);
+    busy = false;
+  vTaskDeleteWithCaps(nullptr);
 }
 static void start() {
   if (busy) return;
   busy = true;
-  // priority 4 like the other TLS helper: below it the handshake (software crypto) starves on core 0.
-  // Installing writes the flash: that needs a stack in internal RAM. Only looking does not: PSRAM.
-  psramStack = !(installReq || autoInstall);
-  BaseType_t ok = installReq || autoInstall
-                      ? xTaskCreatePinnedToCore(task, "update", 6144, nullptr, 4, nullptr, 0)
-                      : xTaskCreatePinnedToCoreWithCaps(task, "update", 6144, nullptr, 4, nullptr, 0, MALLOC_CAP_SPIRAM);
-  if (ok != pdPASS) {
-    snprintf(err, sizeof(err), "zu wenig freier Speicher (%u Bytes am Stück) - nach einem Neustart klappt es",
-             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
-    ESP_LOGW(TAG, "%s", err);
+  // priority 4 like the other TLS helper: below it the handshake (software crypto) starves on core 0
+  if (xTaskCreatePinnedToCoreWithCaps(task, "update", 6144, nullptr, 4, nullptr, 0, MALLOC_CAP_SPIRAM) != pdPASS) {
+    snprintf(err, sizeof(err), "konnte nicht starten");
     st = FAILED;
     busy = false;
   }

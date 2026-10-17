@@ -302,6 +302,7 @@ static volatile bool interruptReq = false;
 static char typed[400];            // typed in the web interface
 static volatile bool typedPending = false;
 static volatile bool weatherReq = false;
+static volatile bool restReq = false;  // an update needs the memory: no warm connections for a while
 static volatile bool forgetFlag = false;
 
 static void onResponseEvent(const cJSON* ev) {
@@ -2019,6 +2020,15 @@ static void task(void*) {
       backoff = 0;
       continue;
     }
+    if (restReq) {  // an update downloads: the warm connections hold internal RAM it needs
+      restReq = false;
+      if (ws) dropSocket();
+      static Job c;
+      c.kind = JOB_CLOSE;
+      xQueueSend(jobQ, &c, 0);
+      nextConnect = esp_timer_get_time() + 180000000;  // (the update restarts the robot long before)
+      ESP_LOGI(TAG, "warm connections closed for the update");
+    }
     if (weatherReq) {  // morning greeting: the weather from Home Assistant on the eyes
       weatherReq = false;
       char cond[24];
@@ -2107,5 +2117,6 @@ void interrupt() {
   if (ph == RESPONDING || mic::audible()) interruptReq = true;
 }
 void requestWeather() { weatherReq = true; }
+void rest() { restReq = true; }
 
 }  // namespace live
