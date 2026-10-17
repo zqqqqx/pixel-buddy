@@ -22,7 +22,7 @@ namespace update {
 static const char* TAG = "update";
 static volatile State st = IDLE;
 static volatile int prog = 0;
-static volatile bool busy = false, autoInstall = false, installReq = false;
+static volatile bool busy = false, autoInstall = false, installReq = false, psramStack = false;
 static char ver[24] = "", url[512] = "", notes[600] = "", err[96] = "";
 
 // the latest release: its version, notes and the update file
@@ -151,13 +151,27 @@ static void task(void*) {
   installReq = false;
   autoInstall = false;
   busy = false;
-  vTaskDelete(nullptr);
+  if (psramStack)
+    vTaskDeleteWithCaps(nullptr);
+  else
+    vTaskDelete(nullptr);
 }
 static void start() {
   if (busy) return;
   busy = true;
-  // priority 4 like the other TLS helper: below it the handshake (software crypto) starves on core 0
-  if (xTaskCreatePinnedToCore(task, "update", 8192, nullptr, 4, nullptr, 0) != pdPASS) busy = false;
+  // priority 4 like the other TLS helper: below it the handshake (software crypto) starves on core 0.
+  // Installing writes the flash: that needs a stack in internal RAM. Only looking does not: PSRAM.
+  psramStack = !(installReq || autoInstall);
+  BaseType_t ok = installReq || autoInstall
+                      ? xTaskCreatePinnedToCore(task, "update", 6144, nullptr, 4, nullptr, 0)
+                      : xTaskCreatePinnedToCoreWithCaps(task, "update", 6144, nullptr, 4, nullptr, 0, MALLOC_CAP_SPIRAM);
+  if (ok != pdPASS) {
+    snprintf(err, sizeof(err), "zu wenig freier Speicher (%u Bytes am Stück) - nach einem Neustart klappt es",
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    ESP_LOGW(TAG, "%s", err);
+    st = FAILED;
+    busy = false;
+  }
 }
 void check(bool inst) {
   autoInstall = inst;

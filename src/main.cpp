@@ -739,7 +739,7 @@ static void publishStatus(float fps) {
            "\"colorway\":\"%s\",\"live\":\"%s\",\"heap\":%u,\"psram\":%u,\"sd\":%s,\"build\":\"%s %s\","
            "\"usd_today\":%.3f,\"usd_month\":%.3f,\"timers\":%d,\"night\":%s,\"privacy\":%s,\"setup\":%s,"
            "\"ringing\":%s,\"slot\":\"%s\",\"display\":%d,\"battery\":%d,\"charging\":%s,\"version\":\"%s\","
-           "\"update\":\"%s\"}",
+           "\"update\":\"%s\",\"heap_block\":%u}",
            net::ip(), net::ssid(), net::rssi(), esp_timer_get_time() / 1000000, fps, eyes::currentName(),
            eyes::colorwayName(), PH[(int)live::phase()], (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM), sd::ok() ? "true" : "false", app->date, app->time,
@@ -747,7 +747,8 @@ static void publishStatus(float fps) {
            privacy ? "true" : "false", net::setupActive() ? "true" : "false", ringUntil ? "true" : "false",
            esp_ota_get_running_partition()->label, (int)(backlight * 100.f + 0.5f), battery::level(),
            battery::charging() ? "true" : "false", PIXEL_VERSION,
-           update::state() == update::AVAILABLE ? update::latest() : "");
+           update::state() == update::AVAILABLE ? update::latest() : "",
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   web::setStatus(j);
 }
 
