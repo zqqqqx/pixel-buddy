@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel einrichten</title>
+<style>
+:root{--bg:#0d0f14;--panel:#161922;--line:#262b38;--text:#e9ecf3;--muted:#8a93a8;--acc:#4d7cff;--ok:#3ecf8e;--bad:#ff5d6c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:20px 16px 40px}
+main{max-width:440px;margin:0 auto}
+.logo{display:flex;gap:6px;margin:8px 0 14px}.logo i{width:22px;height:27px;border-radius:50%;background:#f6f3ea;position:relative;display:block}
+.logo i:after{content:"";position:absolute;left:6px;top:5px;width:10px;height:16px;border-radius:50%;background:var(--acc)}
+h1{font-size:22px;margin:0 0 4px}p{color:var(--muted);margin:0 0 18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}
+input,select{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0f1218;color:var(--text);font:inherit}
+.nets{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow:auto}
+.net{display:flex;justify-content:space-between;align-items:center;padding:11px 12px;border-radius:10px;background:#0f1218;border:1px solid var(--line);cursor:pointer}
+.net.on{border-color:var(--acc)}.net small{color:var(--muted)}
+button{width:100%;padding:13px;border:0;border-radius:10px;background:var(--acc);color:#fff;font:600 16px system-ui;margin-top:16px;cursor:pointer}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--text);margin-top:8px}
+.msg{margin-top:14px;padding:12px;border-radius:10px;display:none}.msg.on{display:block}
+.msg.ok{background:rgba(62,207,142,.12);color:var(--ok)}.msg.bad{background:rgba(255,93,108,.12);color:var(--bad)}.msg.wait{background:#0f1218;color:var(--muted)}
+a{color:var(--acc)}
+</style>
+</head>
+<body>
+<main>
+  <div class="logo"><i></i><i></i></div>
+  <h1>Pixel einrichten</h1>
+  <p>Wähle dein WLAN – Pixel verbindet sich damit und ist danach unter <b>pixel.local</b> erreichbar.</p>
+  <div class="card">
+    <label>WLAN in der Nähe</label>
+    <div class="nets" id="nets"><small style="color:var(--muted)">Suche …</small></div>
+    <button class="ghost" type="button" onclick="scan()">Neu suchen</button>
+    <label for="ssid">Netzwerkname</label>
+    <input id="ssid" autocomplete="off" autocapitalize="off">
+    <label for="pass">Passwort</label>
+    <input id="pass" type="password" autocomplete="off">
+    <div id="keyBox">
+      <label for="key">OpenAI API-Key <span id="keyHint"></span></label>
+      <input id="key" type="password" placeholder="sk-…" autocomplete="off" autocapitalize="off">
+    </div>
+    <button id="save" onclick="save()">Verbinden</button>
+    <div class="msg" id="msg"></div>
+  </div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+function msg(t,c){const m=$('#msg');m.className='msg on '+c;m.innerHTML=t}
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function scan(){$('#nets').innerHTML='<small style="color:var(--muted)">Suche …</small>';
+  fetch('/api/wifi/scan').then(r=>r.json()).then(l=>{const n=$('#nets');n.innerHTML='';
+    if(!l.length){n.innerHTML='<small style="color:var(--muted)">Nichts gefunden – Name unten eintippen.</small>';return}
+    l.forEach(w=>{const d=document.createElement('div');d.className='net';
+      d.innerHTML=`<span>${esc(w.ssid)}</span><small>${w.open?'offen · ':''}${w.rssi>-60?'stark':w.rssi>-72?'gut':'schwach'}</small>`;
+      d.onclick=()=>{document.querySelectorAll('.net').forEach(e=>e.classList.remove('on'));d.classList.add('on');$('#ssid').value=w.ssid;$('#pass').focus()};
+      n.appendChild(d)})}).catch(()=>{$('#nets').innerHTML='<small>Suche fehlgeschlagen</small>'})}
+function save(){const b={ssid:$('#ssid').value.trim(),pass:$('#pass').value,api_key:$('#key').value.trim()};
+  if(!b.ssid){msg('Bitte ein WLAN wählen.','bad');return}
+  $('#save').disabled=true;msg('Verbinde mit „'+esc(b.ssid)+'“ …','wait');
+  fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()).then(j=>{
+    if(!j.ok){msg(j.error||'Das hat nicht geklappt.','bad');$('#save').disabled=false;return}poll(0)}).catch(()=>poll(0))}
+function poll(n){setTimeout(()=>fetch('/api/wifi/status').then(r=>r.json()).then(s=>{
+    if(s.state==2){msg(`Verbunden! Verbinde dein Handy wieder mit deinem WLAN und öffne <a href="http://${s.ip}/">http://${s.ip}</a> oder <a href="http://pixel.local/">pixel.local</a>.${s.key?'':'<br>Noch fehlt der OpenAI-Key – den kannst du dort unter „Gespräch“ eintragen.'}`,'ok');return}
+    if(s.state==3){msg('Pixel kommt nicht in dieses WLAN. Passwort prüfen und nochmal versuchen.','bad');$('#save').disabled=false;return}
+    if(n<40)poll(n+1);else{msg('Keine Antwort – nochmal versuchen.','bad');$('#save').disabled=false}
+  }).catch(()=>{if(n<40)poll(n+1)}),1000)}
+fetch('/api/wifi/status').then(r=>r.json()).then(s=>{if(s.key){$('#keyHint').textContent='(schon hinterlegt – nur zum Ändern)'}else{$('#keyHint').textContent='(nötig zum Sprechen)'}
+  if(s.ssid)$('#ssid').value=s.ssid});
+scan();
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel installieren</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<style>
+:root{--bg:#0d0f14;--panel:#161922;--line:#262b38;--text:#e9ecf3;--muted:#8a93a8;--acc:#4d7cff}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px 16px}
+main{max-width:520px;margin:0 auto}h1{margin:0 0 6px}p,li{color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin:16px 0}
+esp-web-install-button button{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:13px 20px;font:600 16px system-ui;cursor:pointer}
+</style>
+</head>
+<body><main>
+<h1>Pixel installieren</h1>
+<p>Für das Spotpear ESP32-S3 „muma“ Board mit 1,54″-Display. Funktioniert in Chrome oder Edge am Computer.</p>
+<div class="card">
+<ol>
+<li>Board per USB-C anschließen.</li>
+<li>Auf „Installieren“ klicken und den Port wählen (meist „USB JTAG/serial debug unit“).</li>
+<li>Nach dem Neustart zeigt Pixel einen QR-Code: mit dem Handy scannen, WLAN wählen, OpenAI-API-Key eintragen – fertig.</li>
+</ol>
+<esp-web-install-button manifest="manifest.json"><button slot="activate">Installieren</button>
+<span slot="unsupported">Dieser Browser kann keine USB-Geräte flashen – bitte Chrome oder Edge nehmen.</span></esp-web-install-button>
+</div>
+<p>Danach: Webinterface unter <b>http://pixel.local</b>. BOOT-Taste 5× schnell drücken öffnet ein Menü (Neustart, Ausschalten, Werkseinstellung).</p>
+</main></body></html>

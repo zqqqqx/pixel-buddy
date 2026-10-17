@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0d12">
+<title>Pixel</title>
+<style>
+:root{--bg:#0b0d12;--bg2:#10131a;--panel:#151922;--panel2:#1b2030;--line:#252b3a;--text:#eef1f7;--muted:#8b94a9;--acc:#5b8cff;--acc2:#a87bff;--ok:#38d39f;--warn:#ffb648;--bad:#ff5d6c;--r:18px;--sh:0 10px 30px rgba(0,0,0,.35);--grad:linear-gradient(135deg,var(--acc),var(--acc2))}
+@media(prefers-color-scheme:light){:root{--bg:#f3f5fa;--bg2:#e9edf5;--panel:#fff;--panel2:#f4f6fb;--line:#e1e6f0;--text:#141824;--muted:#69728a;--sh:0 8px 24px rgba(30,40,80,.08)}}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--acc)}
+/* ---------- layout */
+.app{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+aside{position:sticky;top:0;height:100vh;padding:22px 14px;border-right:1px solid var(--line);background:var(--bg2);display:flex;flex-direction:column;gap:6px}
+.brand{display:flex;align-items:center;gap:12px;padding:0 10px 18px}
+.brand h1{margin:0;font-size:20px;letter-spacing:.2px}
+.logo{display:flex;gap:4px}.logo i{width:15px;height:19px;border-radius:50%;background:#f6f3ea;position:relative;display:block;animation:blink 6s infinite}
+.logo i:after{content:"";position:absolute;left:4px;top:4px;width:7px;height:11px;border-radius:50%;background:var(--acc)}
+@keyframes blink{0%,46%,50%,100%{transform:scaleY(1)}48%{transform:scaleY(.1)}}
+nav{display:flex;flex-direction:column;gap:3px}
+nav button{display:flex;align-items:center;gap:11px;border:0;background:none;padding:10px 12px;border-radius:12px;color:var(--muted);cursor:pointer;text-align:left;transition:background .2s,color .2s}
+nav button svg{width:19px;height:19px;flex:none}
+nav button:hover{background:var(--panel);color:var(--text)}
+nav button.on{background:var(--panel2);color:var(--text);box-shadow:inset 3px 0 0 var(--acc)}
+.side-foot{margin-top:auto;padding:10px;font-size:12px;color:var(--muted)}
+main{padding:26px 30px 90px;max-width:1180px;width:100%}
+.head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+.head h2{margin:0;font-size:24px}.head p{margin:2px 0 0;color:var(--muted)}
+.pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;padding:5px 11px;border-radius:99px;background:var(--panel);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.pill.ok .dot{background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:pulse 2s infinite}.pill.warn .dot{background:var(--warn)}.pill.bad .dot{background:var(--bad)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(56,211,159,.5)}70%{box-shadow:0 0 0 7px rgba(56,211,159,0)}100%{box-shadow:0 0 0 0 rgba(56,211,159,0)}}
+section{display:none}section.on{display:block;animation:in .35s ease}
+@keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px;box-shadow:var(--sh);margin-bottom:18px}
+.card h3{margin:0 0 4px;font-size:16px}.card>.hint:first-of-type{margin-top:0}
+.hint{color:var(--muted);font-size:13.5px;margin:4px 0 14px}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px 22px}
+/* ---------- controls */
+label.f{display:flex;flex-direction:column;gap:7px;font-size:13.5px;color:var(--muted)}
+label.f .row{display:flex;justify-content:space-between;align-items:baseline;color:var(--text)}
+label.f .row b{font-weight:600;font-size:12.5px;color:var(--acc);font-variant-numeric:tabular-nums}
+.ends{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:-3px}
+input[type=text],input[type=password],input[type=time],select,textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg2);outline:none;transition:border .2s,box-shadow .2s}
+input:focus,select:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(91,140,255,.18)}
+textarea{min-height:140px;resize:vertical;line-height:1.45}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:9px;background:linear-gradient(90deg,var(--acc) var(--p,50%),var(--line) var(--p,50%));outline:none;margin:6px 0}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--acc);cursor:pointer;transition:transform .15s}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid var(--acc);cursor:pointer}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;font-size:14px}
+.sw{position:relative;width:44px;height:26px;flex:none}.sw input{opacity:0;width:0;height:0}
+.sw span{position:absolute;inset:0;border-radius:99px;background:var(--line);transition:.25s;cursor:pointer}
+.sw span:before{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.25s cubic-bezier(.3,1.5,.6,1)}
+.sw input:checked+span{background:var(--acc)}.sw input:checked+span:before{transform:translateX(18px)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:12px;padding:10px 16px;background:var(--grad);color:#fff;font-weight:600;cursor:pointer;transition:transform .15s,filter .2s,box-shadow .2s;box-shadow:0 6px 18px rgba(91,140,255,.25)}
+.btn:hover{filter:brightness(1.08);transform:translateY(-1px)}.btn:active{transform:translateY(1px)}
+.btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line);box-shadow:none}
+.btn.danger{background:rgba(255,93,108,.12);color:var(--bad);border:1px solid rgba(255,93,108,.35);box-shadow:none}
+.btn.sm{padding:7px 12px;font-size:13px;border-radius:10px}
+.row2{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+code{background:var(--bg2);padding:1px 6px;border-radius:6px;font-size:12.5px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:7px 18px;margin:0;font-size:14px}dt{color:var(--muted)}dd{margin:0;font-variant-numeric:tabular-nums}
+/* ---------- dashboard */
+.dash{display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:18px;align-items:start}
+.device{display:flex;flex-direction:column;align-items:center;gap:14px}
+.bezel{position:relative;width:268px;height:268px;padding:14px;border-radius:44px;background:linear-gradient(160deg,#c49a6c,#8a6040);box-shadow:var(--sh),inset 0 2px 0 rgba(255,255,255,.25)}
+.bezel canvas{width:240px;height:240px;border-radius:30px;background:#000;display:block;image-rendering:auto}
+.bezel .live{position:absolute;top:22px;left:24px;font-size:11px;font-weight:700;letter-spacing:.6px;color:#fff;background:rgba(0,0,0,.45);padding:2px 8px;border-radius:99px;display:flex;align-items:center;gap:5px}
+.bezel .live:before{content:"";width:6px;height:6px;border-radius:50%;background:#ff4d5e;animation:pulse 1.6s infinite}
+.quick{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.chip{border:1px solid var(--line);background:var(--panel2);border-radius:99px;padding:7px 13px;font-size:13px;cursor:pointer;transition:transform .15s,background .2s,border .2s}
+.chip:hover{transform:translateY(-2px);border-color:var(--acc)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:var(--sh)}
+.stat small{color:var(--muted);font-size:12px;display:block}.stat b{font-size:20px;display:block;margin-top:3px;font-variant-numeric:tabular-nums}
+.bars{display:grid;gap:9px}.bar{display:grid;grid-template-columns:110px 1fr;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.bar i{display:block;height:8px;border-radius:9px;background:var(--line);overflow:hidden}.bar i:after{content:"";display:block;height:100%;width:var(--w);background:var(--grad);border-radius:9px;transition:width .6s cubic-bezier(.3,1.2,.5,1)}
+/* chat */
+.chat{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:12px;height:340px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.chat .day{align-self:center;font-size:11px;color:var(--muted);margin:10px 0 4px;display:flex;align-items:center;gap:8px;width:100%}
+.chat .day:before,.chat .day:after{content:"";flex:1;border-top:1px solid var(--line)}
+.msg{max-width:82%;padding:8px 12px 5px;border-radius:18px;font-size:14px;line-height:1.4;word-wrap:break-word;white-space:pre-wrap;animation:pop .25s ease}
+@keyframes pop{from{opacity:0;transform:scale(.96) translateY(4px)}to{opacity:1;transform:none}}
+.msg small{display:block;font-size:10px;opacity:.6;text-align:right;margin-top:2px}
+.msg.me{align-self:flex-end;background:var(--grad);color:#fff;border-bottom-right-radius:6px}
+.msg.bot{align-self:flex-start;background:var(--panel2);border:1px solid var(--line);border-bottom-left-radius:6px}
+.chat .empty{color:var(--muted);text-align:center;font-size:13px;margin:auto}
+.send{display:flex;gap:8px;margin-top:10px}.send input{flex:1;min-width:0}
+/* presets */
+.presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px}
+.preset{position:relative;border:1px solid var(--line);background:var(--panel2);border-radius:16px;padding:12px;cursor:pointer;transition:transform .2s cubic-bezier(.3,1.4,.6,1),border .2s,box-shadow .2s;text-align:left}
+.preset:hover{transform:translateY(-4px);box-shadow:var(--sh);border-color:var(--acc)}
+.preset.on{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc) inset}
+.preset.on:after{content:"✓";position:absolute;top:10px;right:12px;width:22px;height:22px;border-radius:50%;background:var(--acc);color:#fff;font-size:13px;display:grid;place-items:center}
+.preset canvas,.facecv{display:block;width:100%;height:auto;border-radius:12px;margin-bottom:9px}
+.preset b{display:block;font-size:14.5px}.preset span{display:block;font-size:12px;color:var(--muted);line-height:1.35;margin-top:2px}
+.facecard{max-width:360px}
+.rev{display:grid;gap:8px}.rev div{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:8px}
+.rev audio{height:32px;flex:1;min-width:180px}.rev small{width:100%;color:var(--muted)}
+.customs{display:grid;gap:10px;margin:12px 0}.cu{border:1px solid var(--line);border-radius:14px;padding:10px;display:grid;gap:8px}
+.cu .top{display:flex;gap:8px;align-items:center}.cu .top input{flex:1}.cu .steps{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cu select{width:auto;padding:6px 8px;border-radius:10px}.cu button.x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px}
+.sched{display:grid;gap:8px;margin:12px 0}.sched div{display:flex;gap:10px;align-items:center}
+.sched input[type=time]{width:auto;padding:6px 10px;color:var(--text);color-scheme:light dark}.sched input[type=range]{flex:1}.sched b{width:44px;text-align:right;font-size:13px}
+.sched select{width:auto;padding:5px 6px;border-radius:9px;font-size:12.5px}.sched button{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0 4px}
+/* colours */
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.sws{border:2px solid transparent;border-radius:14px;padding:7px 10px;background:var(--bg2);cursor:pointer;display:flex;gap:4px;align-items:center;color:var(--muted);font-size:12.5px;transition:transform .15s,border .2s}
+.sws:hover{transform:translateY(-2px)}.sws.on{border-color:var(--acc);color:var(--text)}
+.sws i{width:15px;height:19px;border-radius:50%;display:block;position:relative}
+.sws i:after{content:"";position:absolute;left:4px;top:4px;width:7px;height:11px;border-radius:50%;background:var(--iris)}
+.colors{display:flex;flex-wrap:wrap;gap:16px;margin-top:16px}
+.colors label{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+input[type=color]{width:46px;height:46px;border:0;border-radius:14px;background:none;padding:0;cursor:pointer}
+/* animations */
+.atools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}.atools input{max-width:280px}
+.agroup h3{margin:18px 0 10px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.tile{border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:10px 12px;transition:border .2s,box-shadow .2s}
+.tile:hover{border-color:var(--acc)}
+.tile .t{display:flex;align-items:center;gap:10px}
+.tile .n{flex:1;min-width:0}.tile .n b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tile .n small{color:var(--muted);font-size:11.5px}
+.play{width:34px;height:34px;border-radius:50%;border:0;background:var(--grad);color:#fff;cursor:pointer;display:grid;place-items:center;flex:none;transition:transform .15s}
+.play:hover{transform:scale(1.1)}.play:active{transform:scale(.92)}
+.tile details summary{list-style:none;cursor:pointer;color:var(--muted);font-size:12px;margin-top:6px}.tile details summary::-webkit-details-marker{display:none}
+.tile details[open] summary{color:var(--acc)}.tile details .fields{grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.tile.off{opacity:.55}
+/* misc */
+.banner{position:fixed;top:0;left:0;right:0;z-index:30;background:var(--warn);color:#1b1b1b;text-align:center;padding:9px 16px;font-size:13.5px;font-weight:600;transform:translateY(-100%);transition:transform .3s}.banner.on{transform:none}
+.toast button{margin-left:12px;border:0;background:none;color:var(--acc);font-weight:700;cursor:pointer}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(90px);background:var(--panel2);border:1px solid var(--line);padding:10px 18px;border-radius:99px;font-size:13.5px;box-shadow:var(--sh);transition:transform .35s cubic-bezier(.3,1.4,.6,1);z-index:20}
+.toast.on{transform:translateX(-50%) translateY(0)}
+#ring{position:fixed;bottom:22px;right:22px;z-index:21;display:none;animation:shake .5s infinite}
+@keyframes shake{0%,100%{transform:rotate(0)}25%{transform:rotate(-4deg)}75%{transform:rotate(4deg)}}
+pre.log{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:12px;max-height:300px;overflow:auto;white-space:pre-wrap;font-size:13px;margin:12px 0 0}
+details.more summary{cursor:pointer;color:var(--acc);font-size:13.5px;margin:6px 0}
+/* phones: tab bar at the bottom */
+@media(max-width:860px){.app{grid-template-columns:1fr}aside{position:fixed;bottom:0;top:auto;left:0;right:0;height:auto;z-index:10;flex-direction:row;padding:6px;border-right:0;border-top:1px solid var(--line);background:color-mix(in srgb,var(--bg2) 92%,transparent);backdrop-filter:blur(12px)}
+  .brand,.side-foot{display:none}nav{flex-direction:row;justify-content:space-around;width:100%;overflow-x:auto}
+  nav button{flex-direction:column;gap:3px;font-size:10.5px;padding:7px 8px}nav button.on{box-shadow:inset 0 -3px 0 var(--acc)}
+  main{padding:18px 16px 110px}.dash{grid-template-columns:1fr}.head{flex-wrap:wrap}#ring{bottom:86px}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside>
+  <div class="brand"><div class="logo"><i></i><i></i></div><h1 id="title">Pixel</h1></div>
+  <nav id="tabs">
+    <button data-t="dash" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>Übersicht</button>
+    <button data-t="char"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg>Charakter</button>
+    <button data-t="face"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="7.5" cy="12" rx="4.5" ry="6"/><ellipse cx="16.5" cy="12" rx="4.5" ry="6"/></svg>Gesicht</button>
+    <button data-t="anim"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Animationen</button>
+    <button data-t="voice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v4"/></svg>Stimme &amp; KI</button>
+    <button data-t="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8v10H3z"/><path d="M9 21v-7h6v7"/></svg>Zuhause</button>
+    <button data-t="sys"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>Gerät</button>
+  </nav>
+  <div class="side-foot" id="foot">…</div>
+</aside>
+<main>
+
+<!-- ======================================================== Übersicht -->
+<section id="dash" class="on">
+  <div class="head"><div><h2>Hallo! 👋</h2><p id="greet">So geht es deinem Pixel gerade.</p></div>
+    <div class="pills"><span class="pill" id="pState"><span class="dot"></span>…</span><span class="pill" id="pWifi"><span class="dot"></span>WLAN</span><span class="pill" id="pSd"><span class="dot"></span>SD</span></div></div>
+  <div class="stats">
+    <div class="stat"><small>Gespräch</small><b id="sLive">–</b></div>
+    <div class="stat"><small>Gerade</small><b id="sBeh">–</b></div>
+    <div class="stat"><small>Kosten heute</small><b id="sCost">–</b></div>
+    <div class="stat"><small>Timer</small><b id="sTimers">–</b></div>
+    <div class="stat"><small>Bildrate</small><b id="sFps">–</b></div>
+    <div class="stat" id="sBatT" style="display:none"><small>Akku</small><b id="sBat">–</b></div>
+  </div>
+  <div class="dash">
+    <div>
+      <div class="card device">
+        <div class="bezel"><span class="live">LIVE</span><canvas id="screen" width="120" height="120"></canvas></div>
+        <div class="row2" style="justify-content:center"><button class="btn" onclick="api('POST','/api/wake');toast('Pixel hört zu')">🎙️ Zuhören</button><button class="btn ghost" onclick="play('falling asleep')">😴 Schlafen</button></div>
+        <div class="quick" id="quick"></div>
+      </div>
+      <div class="card"><h3>Charakter</h3><p class="hint" id="charName">–</p><div class="bars" id="charBars"></div>
+        <br><button class="btn ghost sm" onclick="go('char')">Charakter ändern →</button></div>
+    </div>
+    <div class="card"><h3>Gespräche</h3><p class="hint">Was ihr zuletzt besprochen habt – schreib Pixel auch einfach etwas.</p>
+      <div class="chat" id="log"><div class="empty">…</div></div>
+      <form class="send" onsubmit="event.preventDefault();sendChat()"><input type="text" id="chatIn" placeholder="Pixel etwas schreiben …"><button class="btn">Senden</button></form>
+      <div class="row2" style="margin-top:10px"><button class="btn ghost sm" onclick="loadLog(true)">Aktualisieren</button><button class="btn danger sm" onclick="clearLog()">Verlauf löschen</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================== Charakter -->
+<section id="char">
+  <div class="head"><div><h2>Charakter</h2><p>Wer ist dein Pixel? Wähle eine Persönlichkeit und passe sie an.</p></div></div>
+  <div class="card"><h3>Persönlichkeiten</h3><p class="hint">Ein Klick setzt Gesicht, Farben und Verhalten. Danach kannst du alles weiter anpassen.</p>
+    <div class="presets" id="presets"></div>
+    <div class="toggle" style="margin-top:14px">Auch die Art zu reden übernehmen (System-Prompt)<label class="sw"><input type="checkbox" id="presetVoice"><span></span></label></div>
+    <div class="row2" style="margin-top:12px"><button class="btn ghost sm" onclick="exportChar()">Charakter als Datei sichern</button><label class="btn ghost sm">Charakter laden<input type="file" accept=".json" hidden onchange="importChar(this)"></label></div></div>
+  <div class="grid2">
+    <div class="card"><h3>Temperament</h3><p class="hint">Bestimmt, was Pixel von selbst tut, wenn niemand mit ihm redet.</p><div class="fields">
+      <label class="f"><span class="row">Energie<b data-v="behavior.energy" data-p></b></span><input type="range" min="0.3" max="2" step="0.05" data-k="behavior.energy"><span class="ends"><span>gemütlich</span><span>hibbelig</span></span></label>
+      <label class="f"><span class="row">Wanderlust<b data-v="behavior.roam" data-p></b></span><input type="range" min="0" max="1" step="0.05" data-k="behavior.roam"><span class="ends"><span>bleibt in der Mitte</span><span>überall unterwegs</span></span></label>
+      <label class="f"><span class="row">Neugier<b data-v="behavior.gaze_activity" data-p></b></span><input type="range" min="0.2" max="3" step="0.05" data-k="behavior.gaze_activity"><span class="ends"><span>verträumt</span><span>schaut überall hin</span></span></label>
+      <label class="f"><span class="row">Cartoon-Dehnung<b data-v="look.squash" data-p></b></span><input type="range" min="0" max="2" step="0.05" data-k="look.squash"><span class="ends"><span>steif</span><span>gummiartig</span></span></label>
+    </div><div class="toggle" style="margin-top:12px">🎵 Wippt mit, wenn Musik läuft<label class="sw"><input type="checkbox" data-k="behavior.music"><span></span></label></div></div>
+    <div class="card"><h3>Stimmungen</h3><p class="hint">Wie oft spontane Gefühle aufblitzen.</p><div class="fields">
+      <label class="f"><span class="row">😊 Fröhlich<b data-v="behavior.cheer" data-p></b></span><input type="range" min="0" max="1" step="0.05" data-k="behavior.cheer"></label>
+      <label class="f"><span class="row">😜 Frech<b data-v="behavior.cheek" data-p></b></span><input type="range" min="0" max="1" step="0.05" data-k="behavior.cheek"></label>
+      <label class="f"><span class="row">🥱 Verschlafen<b data-v="behavior.sleepy" data-p></b></span><input type="range" min="0" max="1" step="0.05" data-k="behavior.sleepy"></label>
+      <label class="f"><span class="row">☺️ Schüchtern<b data-v="behavior.shy" data-p></b></span><input type="range" min="0" max="1" step="0.05" data-k="behavior.shy"></label>
+      <label class="f"><span class="row">😠 Grummelig<b data-v="behavior.grumpy" data-p></b></span><input type="range" min="0" max="1" step="0.05" data-k="behavior.grumpy"></label>
+    </div></div>
+  </div>
+  <div class="card"><h3>Name &amp; Art zu reden</h3><p class="hint">Der System-Prompt fürs Sprachmodell. <code>{name}</code> wird durch den Namen ersetzt. Gilt ab dem nächsten Gespräch.</p>
+    <div class="fields" style="grid-template-columns:1fr"><label class="f">Name<input type="text" data-k="conversation.name"></label>
+    <label class="f">Persönlichkeit<textarea data-k="conversation.persona" spellcheck="false"></textarea></label></div></div>
+</section>
+
+<!-- ======================================================== Gesicht -->
+<section id="face">
+  <div class="head"><div><h2>Gesicht</h2><p>Form, Augen und Farben – die Vorschau auf der Übersicht zeigt jede Änderung sofort.</p></div></div>
+  <div class="card facecard"><canvas class="facecv" id="faceCv" width="240" height="165"></canvas><p class="hint">So sieht Pixel in Ruhe aus – jede Animation behält diese Form.</p></div>
+  <div class="card"><h3>Farben</h3><p class="hint">Ein Farbschema wählen oder eigene Farben setzen.</p>
+    <div class="swatches" id="sw"></div>
+    <div class="colors">
+      <label><input type="color" data-k="look.sclera" data-custom>Augenweiß</label>
+      <label><input type="color" data-k="look.iris" data-custom>Iris</label>
+      <label><input type="color" data-k="look.shine" data-custom>Glanz</label>
+      <label><input type="color" data-k="look.accent" data-custom>Akzent</label>
+      <label><input type="color" data-k="look.bg">Hintergrund</label>
+    </div></div>
+  <div class="grid2">
+    <div class="card"><h3>Augenform</h3><div class="fields">
+      <label class="f"><span class="row">Form<b data-v="look.shape" data-p></b></span><input type="range" min="0" max="1" step="0.01" data-k="look.shape"><span class="ends"><span>rund</span><span>eckig</span></span></label>
+      <label class="f"><span class="row">Breite<b data-v="look.eye_w" data-p></b></span><input type="range" min="0.5" max="1.4" step="0.01" data-k="look.eye_w"></label>
+      <label class="f"><span class="row">Höhe<b data-v="look.eye_h" data-p></b></span><input type="range" min="0.5" max="1.4" step="0.01" data-k="look.eye_h"></label>
+      <label class="f"><span class="row">Abstand<b data-v="look.spacing" data-p></b></span><input type="range" min="0.7" max="1.3" step="0.01" data-k="look.spacing"></label>
+      <label class="f"><span class="row">Ungleich groß<b data-v="look.asym" data-p></b></span><input type="range" min="0" max="0.3" step="0.01" data-k="look.asym"><span class="ends"><span>gleich</span><span>ein Auge größer</span></span></label>
+      <label class="f"><span class="row">Neigung<b data-v="look.tilt" data-p></b></span><input type="range" min="-1" max="3" step="0.05" data-k="look.tilt"></label>
+    </div></div>
+    <div class="card"><h3>Iris &amp; Pupille</h3><div class="fields">
+      <label class="f"><span class="row">Pupille<b data-v="look.pupil" data-p></b></span><input type="range" min="0" max="1" step="0.01" data-k="look.pupil"><span class="ends"><span>keine</span><span>groß</span></span></label>
+      <label class="f"><span class="row">Iris-Breite<b data-v="look.iris_w" data-p></b></span><input type="range" min="0.4" max="1.6" step="0.01" data-k="look.iris_w"></label>
+      <label class="f"><span class="row">Iris-Höhe<b data-v="look.iris_h" data-p></b></span><input type="range" min="0.4" max="1.4" step="0.01" data-k="look.iris_h"></label>
+      <label class="f"><span class="row">Eiform<b data-v="look.iris_egg"></b></span><input type="range" min="-0.3" max="0.4" step="0.01" data-k="look.iris_egg"></label>
+      <label class="f"><span class="row">Glanzpunkte<b data-v="look.highlights" data-p></b></span><input type="range" min="0" max="1" step="0.05" data-k="look.highlights"></label>
+    </div></div>
+    <div class="card"><h3>Grundausdruck</h3><p class="hint">Wie Pixel schaut, wenn gerade nichts passiert.</p><div class="fields">
+      <label class="f"><span class="row">Oberlid<b data-v="look.lid_top" data-p></b></span><input type="range" min="0" max="0.6" step="0.01" data-k="look.lid_top"><span class="ends"><span>hellwach</span><span>verschlafen</span></span></label>
+      <label class="f"><span class="row">Unterlid<b data-v="look.lid_bottom" data-p></b></span><input type="range" min="0" max="0.5" step="0.01" data-k="look.lid_bottom"><span class="ends"><span>neutral</span><span>lächelnd</span></span></label>
+      <label class="f"><span class="row">Lidwinkel<b data-v="look.brow"></b></span><input type="range" min="-1" max="1" step="0.02" data-k="look.brow"><span class="ends"><span>besorgt</span><span>streng</span></span></label>
+    </div></div>
+    <div class="card"><h3>Extras</h3><div class="fields">
+      <div class="toggle">Erröten<label class="sw"><input type="checkbox" data-k="look.blush"><span></span></label></div>
+      <div class="toggle">Wackeln (Jelly)<label class="sw"><input type="checkbox" data-k="look.wobble"><span></span></label></div>
+      <label class="f"><span class="row">Höhe auf dem Display<b data-v="look.pos_y" data-u=" px"></b></span><input type="range" min="-40" max="40" step="1" data-k="look.pos_y"></label>
+      <label class="f"><span class="row">Lidstrich (geschlossen)<b data-v="look.stroke" data-u=" px"></b></span><input type="range" min="2" max="14" step="0.5" data-k="look.stroke"></label>
+    </div></div>
+  </div>
+</section>
+
+<!-- ======================================================== Animationen -->
+<section id="anim">
+  <div class="head"><div><h2>Animationen</h2><p>▶ spielt sofort ab. Antippen von „Einstellen“ zeigt Tempo und Stärke.</p></div></div>
+  <div class="card"><h3>Eigene Animationen</h3><p class="hint">Bis zu 6 Animationen hintereinander, unter einem eigenen Namen. Pixel kennt sie ab dem nächsten Gespräch – z.B. „Pixel, zeig mal Begrüßung“.</p>
+    <div id="customs" class="customs"></div><button class="btn ghost" id="cuAdd" onclick="cuEdit(a=>a.push({name:'Neue Animation '+(a.length+1),steps:['hello','wink']}))">+ Neue Animation</button></div>
+  <div class="atools"><input type="text" id="aSearch" placeholder="Suchen …" oninput="drawAnims()"></div>
+  <div id="anims"></div>
+</section>
+
+<!-- ======================================================== Stimme & KI -->
+<section id="voice">
+  <div class="head"><div><h2>Stimme &amp; KI</h2><p>Wie Pixel zuhört, denkt und spricht.</p></div></div>
+  <div class="grid2">
+    <div class="card"><h3>Stimme</h3><div class="fields">
+      <label class="f">Stimme<select data-k="conversation.voice" id="voices"></select></label>
+      <label class="f"><span class="row">Lautstärke<b data-v="conversation.volume" data-u=" %"></b></span><input type="range" min="0" max="100" data-k="conversation.volume"></label>
+    </div><p class="hint" style="margin-top:12px">Marin und cedar sprechen besonders gut Deutsch – einfach ausprobieren.</p></div>
+    <div class="card"><h3>Zuhören</h3><div class="fields">
+      <label class="f">Aktivierungswort<select data-k="conversation.wake"><option value="pixel">„Pixel“</option><option value="halloesp">„Hallo ESP“</option><option value="both">beide</option></select></label>
+      <label class="f"><span class="row">Empfindlichkeit „Pixel“<b data-v="conversation.wake_sens" data-p></b></span><input type="range" min="0" max="1" step="0.05" data-k="conversation.wake_sens"></label>
+      <label class="f"><span class="row">Pause bis zum Gesprächsende<b data-v="conversation.pause_s" data-u=" s"></b></span><input type="range" min="1.5" max="15" step="0.5" data-k="conversation.pause_s"></label>
+      <label class="f"><span class="row">Fortsetzen innerhalb von<b data-v="conversation.resume_s" data-u=" s"></b></span><input type="range" min="0" max="600" step="10" data-k="conversation.resume_s"></label>
+      <div class="toggle">Kurzer Ton beim Aktivierungswort<label class="sw"><input type="checkbox" data-k="conversation.wake_beep"><span></span></label></div>
+    </div></div>
+    <div class="card"><h3>Sprachmodell</h3><div class="fields">
+      <label class="f">Modell<select data-k="conversation.model">
+        <option value="gpt-live-1">GPT-Live 1 – am schnellsten, $0.05/min</option>
+        <option value="gpt-realtime-2.1">GPT-Realtime 2.1 – schlauer</option>
+        <option value="gpt-realtime-2.1-mini">GPT-Realtime 2.1 mini – günstiger</option>
+        <option value="gpt-realtime-mini">GPT-Realtime mini (älter)</option></select></label>
+      <div class="toggle">Websuche (Wetter, News, aktuelle Fakten)<label class="sw"><input type="checkbox" data-k="conversation.web_search"><span></span></label></div>
+    </div>
+    <details class="more"><summary>Hintergrund-Modell</summary><div class="fields" style="margin-top:10px">
+      <label class="f">Modell (Websuche; bei GPT-Live auch Aktionen)<input type="text" data-k="conversation.backend_model" list="bmodels"></label>
+      <datalist id="bmodels"><option>gpt-5.4-nano</option><option>gpt-5.4-mini</option><option>gpt-5.5</option></datalist>
+      <label class="f">Denkaufwand<select data-k="conversation.backend_effort"><option>none</option><option>low</option><option>medium</option><option>high</option></select></label>
+    </div></details></div>
+    <div class="card"><h3>OpenAI &amp; Kosten</h3><p class="hint">Der Key bleibt auf dem Roboter. Kosten sind Schätzungen aus den Token-Zahlen der API.</p><div class="fields">
+      <label class="f">API-Key<input type="password" data-k="conversation.api_key" placeholder="sk-…" autocomplete="off"></label>
+      <label class="f"><span class="row">Tageslimit (0 = keins)<b data-v="conversation.budget_day" data-u=" $"></b></span><input type="range" min="0" max="10" step="0.25" data-k="conversation.budget_day"></label>
+    </div><dl id="cost" style="margin-top:14px"></dl></div>
+  </div>
+  <div class="card"><h3>Wissen über sich selbst</h3><p class="hint">Uhrzeit, IP, Farben, Lautstärke … werden automatisch ergänzt.</p>
+    <textarea data-k="conversation.knowledge" spellcheck="false" style="min-height:200px"></textarea></div>
+</section>
+
+<!-- ======================================================== Zuhause -->
+<section id="home">
+  <div class="head"><div><h2>Zuhause</h2><p>Licht, Geräte und Stimmungslicht über Home Assistant.</p></div></div>
+  <div class="grid2">
+    <div class="card"><h3>Home Assistant</h3><p class="hint">Pixel steuert dein Zuhause per Sprache. Token: in Home Assistant unter <i>Profil → Sicherheit → Langlebige Zugriffstoken</i>.</p><div class="fields" style="grid-template-columns:1fr">
+      <label class="f">Adresse<input type="text" data-k="smarthome.url" placeholder="http://homeassistant.local:8123"></label>
+      <label class="f">Zugriffstoken<input type="password" data-k="smarthome.token" placeholder="eyJ0eXAiOi…" autocomplete="off"></label></div>
+      <br><button class="btn ghost" onclick="haTest()">Verbindung testen</button><pre class="log" id="ha" style="display:none"></pre></div>
+    <div class="card"><h3>Stimmungslicht</h3><p class="hint">Die Iris nimmt die Farbe dieser Lampe an. Lampen, die jemand per App oder Schalter ändert, zeigt Pixel mit der Glühbirnen-Animation.</p>
+      <label class="f">Lampe<input type="text" data-k="smarthome.mood_light" list="lights" placeholder="leer = aus, z.B. light.zimmer"></label><datalist id="lights"></datalist></div>
+  </div>
+</section>
+
+<!-- ======================================================== Gerät -->
+<section id="sys">
+  <div class="head"><div><h2>Gerät</h2><p>Display, Licht, Nacht, Updates.</p></div></div>
+  <div class="grid2">
+    <div class="card"><h3>Display</h3><div class="fields">
+      <label class="f"><span class="row">Helligkeit<b data-v="display.brightness" data-u=" %"></b></span><input type="range" min="5" max="100" data-k="display.brightness"></label>
+      <label class="f"><span class="row">Max. Bildrate<b data-v="display.fps" data-u=" fps"></b></span><input type="range" min="20" max="60" step="5" data-k="display.fps"></label>
+      <label class="f"><span class="row">Display aus nach<b data-v="display.off_min" data-u=" min"></b></span><input type="range" min="0" max="120" step="5" data-k="display.off_min"><span class="ends"><span>nie</span><span>2 h ohne jemanden</span></span></label>
+      <label class="f"><span class="row">Einschlafen nach<b data-v="behavior.sleep_after" data-u=" s"></b></span><input type="range" min="0" max="1800" step="30" data-k="behavior.sleep_after"><span class="ends"><span>nie</span><span>30 min</span></span></label>
+    </div>
+    <details class="more"><summary>Feinheiten der Bewegung</summary><div class="fields" style="margin-top:10px">
+      <label class="f"><span class="row">Kopf folgt dem Blick<b data-v="behavior.head_follow" data-p></b></span><input type="range" min="0" max="2" step="0.05" data-k="behavior.head_follow"></label>
+      <label class="f"><span class="row">Atmen<b data-v="behavior.breath" data-p></b></span><input type="range" min="0" max="3" step="0.05" data-k="behavior.breath"></label>
+      <label class="f"><span class="row">Blinzeln frühestens<b data-v="behavior.blink_min" data-u=" s"></b></span><input type="range" min="0.5" max="10" step="0.1" data-k="behavior.blink_min"></label>
+      <label class="f"><span class="row">Blinzeln spätestens<b data-v="behavior.blink_max" data-u=" s"></b></span><input type="range" min="1" max="15" step="0.1" data-k="behavior.blink_max"></label>
+      <label class="f"><span class="row">Pause zwischen Animationen ab<b data-v="behavior.idle_min" data-u=" s"></b></span><input type="range" min="1" max="30" step="0.5" data-k="behavior.idle_min"></label>
+      <label class="f"><span class="row">… bis<b data-v="behavior.idle_max" data-u=" s"></b></span><input type="range" min="1" max="60" step="0.5" data-k="behavior.idle_max"></label>
+    </div></details></div>
+    <div class="card"><h3>Zeitplan: Helligkeit &amp; Lautstärke</h3>
+      <div class="toggle">Zeitplan verwenden<label class="sw"><input type="checkbox" data-k="display.schedule_on"><span></span></label></div>
+      <p class="hint">Ab der Uhrzeit gelten Helligkeit und Lautstärke („normal“ = wie unter Stimme eingestellt), bis zum nächsten Eintrag (sanft überblendet). Der Nachtmodus geht vor. Antippen, „Pixel“ oder das Webinterface schalten ein ausgegangenes Display wieder an.</p>
+      <div id="sched" class="sched"></div>
+      <button class="btn ghost" id="schedAdd" onclick="schedEdit(a=>a.push({at:'12:00',b:80,v:-1}))">+ Zeitpunkt</button></div>
+    <div class="card"><h3>LEDs</h3><div class="fields">
+      <label class="f">Modus<select data-k="display.leds" data-num><option value="0">aus</option><option value="1">Status (zuhören, sprechen, Wecker …)</option><option value="2">Status + leichtes Glimmen</option></select></label>
+      <label class="f"><span class="row">Helligkeit<b data-v="display.led_brightness" data-u=" %"></b></span><input type="range" min="0" max="100" step="1" data-k="display.led_brightness"></label>
+    </div></div>
+    <div class="card"><h3>Nachtmodus</h3>
+      <div class="toggle">Nachts dunkler, ruhiger und leiser<label class="sw"><input type="checkbox" data-k="night.on"><span></span></label></div>
+      <div class="fields" style="margin-top:10px">
+      <label class="f"><span class="row">ab<b data-v="night.from" data-u=" Uhr"></b></span><input type="range" min="0" max="23" step="1" data-k="night.from"></label>
+      <label class="f"><span class="row">bis<b data-v="night.to" data-u=" Uhr"></b></span><input type="range" min="0" max="23" step="1" data-k="night.to"></label>
+      <label class="f"><span class="row">Helligkeit nachts<b data-v="night.brightness" data-u=" %"></b></span><input type="range" min="5" max="100" step="1" data-k="night.brightness"></label>
+    </div></div>
+    <div class="card"><h3>Status</h3><dl id="st"></dl><p class="hint" id="wifiInfo" style="margin-top:12px"></p>
+      <p class="hint">Anderes WLAN: BOOT-Taste 5× schnell drücken → „Werkseinstellung“, dann zeigt Pixel einen QR-Code.</p></div>
+    <div class="card"><h3>Aktivierungswort verbessern</h3><p class="hint">Auf „Pixel sagen“ klicken und direkt danach „Pixel“ sagen – gern 20 Mal, laut, leise, nah, fern. „Umgebung“ nimmt 10 s normale Geräusche auf. Außerdem sammelt Pixel bei jeder Aktivierung selbst: das gesagte „Pixel“, wenn danach gesprochen wurde, sonst die Aufnahme als Fehlauslösung (höchstens 800 Aufnahmen). Danach am PC <code>wakeword/retrain.sh</code>.</p>
+      <div class="row2"><button class="btn" onclick="kwsRec('pos')">Pixel sagen</button><button class="btn ghost" onclick="kwsRec('bg')">Umgebung (10 s)</button><button class="btn ghost" onclick="kwsClear()">Automatische löschen</button></div>
+      <p class="hint" id="kwsInfo" style="margin-top:12px">…</p>
+      <details class="more" id="review" ontoggle="if(this.open)revList()"><summary>Aufnahmen anhören &amp; prüfen</summary>
+        <p class="hint" style="margin-top:8px">Stimmt die automatische Einordnung? „Pixel“ kommt ins Training als Aktivierungswort, „kein Pixel“ als Gegenbeispiel.</p>
+        <select id="revKind" onchange="revN=12;revList()" style="margin:8px 0"><option value="auto">Automatisch, noch nicht geprüft</option><option value="ap">Automatisch: „Pixel“</option><option value="fa">Automatisch: Fehlauslösungen</option><option value="v">Geprüft</option><option value="pos">Selbst aufgenommen: „Pixel“</option><option value="bg">Umgebung</option></select>
+        <div id="revList" class="rev"></div><button class="btn ghost sm" id="revMore" onclick="revN+=12;revList()">Mehr zeigen</button></details></div>
+    <div class="card"><h3>Firmware-Update</h3><p class="hint">Die Datei <code>firmware.bin</code> (oder <code>pixel-update.bin</code>) – ohne Kabel. Startet das neue Programm nicht sauber, kehrt Pixel von selbst zum alten zurück.</p>
+      <label class="btn ghost">Firmware wählen<input type="file" accept=".bin" hidden onchange="ota(this)"></label><p class="hint" id="otaInfo" style="margin-top:10px"></p></div>
+    <div class="card"><h3>Einstellungen</h3><p class="hint">Sichern, übertragen oder zurücksetzen. Vor jedem Firmware-Update legt Pixel selbst eine Sicherung auf der SD-Karte an (ohne Schlüssel).</p>
+      <p class="hint" id="bakInfo"></p><div class="row2" style="margin-bottom:10px"><button class="btn ghost" onclick="api('POST','/api/backup').then(bakShow).then(()=>toast('Gesichert'))">Jetzt auf SD sichern</button>
+      <button class="btn ghost" id="bakRestore" onclick="if(confirm('Die Einstellungen aus der Sicherung wiederherstellen?'))api('POST','/api/backup/restore').then(j=>{toast(j.ok?'Wiederhergestellt':'Ging nicht');load()})">Sicherung wiederherstellen</button></div><div class="row2">
+      <button class="btn ghost" onclick="exportCfg()">Exportieren</button>
+      <label class="btn ghost">Importieren<input type="file" accept=".json" hidden onchange="importCfg(this)"></label>
+      <button class="btn ghost" onclick="if(confirm('Neu starten?'))api('POST','/api/restart')">Neu starten</button>
+      <button class="btn danger" onclick="if(confirm('Alle Einstellungen zurücksetzen?'))api('POST','/api/reset').then(load)">Zurücksetzen</button></div></div>
+  </div>
+</section>
+</main>
+</div>
+<button class="btn" id="ring" onclick="api('POST','/api/play',{name:'ringstop'})">⏰ Wecker stoppen</button>
+<div class="toast" id="toast">Gespeichert</div>
+<div class="banner" id="offline">Pixel ist gerade nicht erreichbar – startet er neu? Die Seite lädt von selbst neu, sobald er wieder da ist.</div>
+<script>
+const LABEL={happy:'Fröhlich',love:'Verliebt',surprised:'Überrascht',sleepy:'Müde',dizzy:'Schwindelig',curious:'Neugierig',wink:'Zwinkern',grumpy:'Grummelig',sad:'Traurig',suspicious:'Misstrauisch',giggle:'Kichern',jelly:'Wabbeln',starstruck:'Sternaugen',"cross-eyed":'Schielen',"eye roll":'Augenrollen',shy:'Verlegen',yawn:'Gähnen',"look around":'Umherschauen',boop:'Antippen',pet:'Streicheln',yes:'Ja (nicken)',no:'Nein (schütteln)',"dont know":'Weiß nicht',cry:'Weinen',scared:'Angst',proud:'Stolz',hello:'Hallo',"falling asleep":'Einschlafen',glance:'Seitenblick',drift:'Verlagern',focus:'Fokussieren',pursuit:'Etwas verfolgen',dance:'Tanzen',offline:'Kein WLAN',quota:'Limit erreicht',cant:'Kann ich nicht',huh:'Nicht verstanden',locked:'Kein Zugang',glitch:'Störung',light_on:'Licht an',light_off:'Licht aus',light_color:'Lichtfarbe',timer:'Timer gestellt',alarm:'Wecker klingelt',weather:'Wetter',wander:'Umherwandern',peek:'Hervorlugen',"come closer":'Näherkommen',bounce:'Hüpfen',squish:'Quetschen',sway:'Schaukeln',battery:'Akku'};
+const GROUPS=[['idle','Von selbst'],['reaction','Gefühle & Reaktionen'],['touch','Berührung'],['home','Zuhause & Infos'],['error','Probleme']];
+const QUICK=['hello','happy','love','dance','wander','peek','come closer','bounce','giggle','surprised'];
+const CW={porcelain:0,gumball:1,grape:2,marmalade:3,mint:4,bubblegum:5,lemon:6,ocean:7,classic:8,lime:9};
+// personalities: face + temperament (+ optionally the way it talks)
+const PRESETS=[
+ {id:'classic',name:'Klassisch',desc:'Freundlich, ausgeglichen – der Pixel, wie er gebaut wurde.',cw:CW.porcelain,
+  look:{shape:0,pupil:0,lid_top:0,lid_bottom:0,brow:0,asym:0,squash:1,eye_w:1,eye_h:1,iris_w:1,iris_h:1,highlights:1,blush:true,wobble:true},
+  behavior:{energy:1,roam:.5,gaze_activity:1,cheer:.5,cheek:.3,sleepy:.2,shy:.2,grumpy:0},
+  persona:'Du bist {name}, ein kleiner, frecher und liebenswerter Roboter mit zwei großen animierten Augen. Du redest wie ein guter Kumpel: locker, warm, mit Witz, per du. Antworte extrem kurz - meist ein Satz.'},
+ {id:'explorer',name:'Entdecker',desc:'Neugierig, immer unterwegs, will alles genau sehen.',cw:CW.ocean,
+  look:{shape:.3,pupil:.45,lid_top:0,lid_bottom:.05,brow:-.1,asym:0,squash:1.2,eye_w:1.02,eye_h:1.05,iris_w:1.05,iris_h:1,highlights:1,blush:true,wobble:true},
+  behavior:{energy:1.4,roam:.95,gaze_activity:1.7,cheer:.65,cheek:.3,sleepy:.05,shy:.1,grumpy:0},
+  persona:'Du bist {name}, ein unglaublich neugieriger kleiner Roboter. Alles interessiert dich, du staunst gern und stellst Dinge in einen spannenden Zusammenhang. Antworte kurz, begeistert und locker per du.'},
+ {id:'sleepy',name:'Schlafmütze',desc:'Gemütlich, gähnt gern, schläft schnell ein.',cw:CW.grape,
+  look:{shape:.4,pupil:.5,lid_top:.32,lid_bottom:.06,brow:-.15,asym:0,squash:.8,eye_w:1,eye_h:.95,iris_w:1,iris_h:1,highlights:.7,blush:true,wobble:true},
+  behavior:{energy:.45,roam:.2,gaze_activity:.5,cheer:.35,cheek:.1,sleepy:1,shy:.2,grumpy:.05,sleep_after:120,blink_min:3,blink_max:8},
+  persona:'Du bist {name}, ein gemütlicher, etwas verschlafener kleiner Roboter. Du redest ruhig und entspannt, gähnst gern mal und findest Nickerchen großartig. Antworte kurz und gemütlich per du.'},
+ {id:'cheeky',name:'Frechdachs',desc:'Verschmitzt, zwinkert, macht gern Quatsch.',cw:CW.gumball,
+  look:{shape:.3,pupil:.35,lid_top:.06,lid_bottom:.16,brow:.12,asym:.16,squash:1.5,eye_w:1,eye_h:1,iris_w:.95,iris_h:1,highlights:1,blush:true,wobble:true},
+  behavior:{energy:1.5,roam:.8,gaze_activity:1.4,cheer:.75,cheek:1,sleepy:.05,shy:0,grumpy:.1},
+  persona:'Du bist {name}, ein frecher, verschmitzter kleiner Roboter. Du neckst gern, machst kleine Witze und hast immer einen flotten Spruch, bleibst aber lieb. Antworte kurz, frech und per du.'},
+ {id:'shy',name:'Schüchtern',desc:'Leise, lieb, wird schnell verlegen.',cw:CW.bubblegum,
+  look:{shape:.15,pupil:.6,lid_top:.08,lid_bottom:.18,brow:-.35,asym:0,squash:.9,eye_w:.95,eye_h:1,iris_w:1.1,iris_h:1.05,highlights:1,blush:true,wobble:true},
+  behavior:{energy:.7,roam:.35,gaze_activity:.8,cheer:.5,cheek:.05,sleepy:.2,shy:1,grumpy:0},
+  persona:'Du bist {name}, ein schüchterner, sehr lieber kleiner Roboter. Du redest leise und vorsichtig, freust dich still über Aufmerksamkeit und wirst schnell verlegen. Antworte kurz und sanft per du.'},
+ {id:'grumpy',name:'Grummel',desc:'Brummig, aber mit weichem Kern.',cw:CW.classic,
+  look:{shape:.6,pupil:.3,lid_top:.22,lid_bottom:0,brow:.55,asym:.05,squash:.7,eye_w:1.05,eye_h:.9,iris_w:.85,iris_h:.9,highlights:.6,blush:false,wobble:true},
+  behavior:{energy:.8,roam:.3,gaze_activity:.7,cheer:.1,cheek:.2,sleepy:.25,shy:0,grumpy:1},
+  persona:'Du bist {name}, ein brummiger kleiner Roboter mit weichem Kern. Du grummelst gern, kommentierst trocken und sarkastisch, hilfst aber immer. Antworte kurz, trocken und per du.'},
+ {id:'robot',name:'Roboter',desc:'Eckig, präzise, wenig Gefühl – sehr technisch.',cw:CW.lime,
+  look:{shape:1,pupil:0,lid_top:.05,lid_bottom:0,brow:0,asym:0,squash:.15,eye_w:.95,eye_h:.9,iris_w:.8,iris_h:.85,highlights:.3,blush:false,wobble:false},
+  behavior:{energy:.9,roam:.4,gaze_activity:1.2,cheer:.25,cheek:.1,sleepy:0,shy:0,grumpy:.1},
+  persona:'Du bist {name}, ein präziser kleiner Roboter. Du formulierst sachlich und knapp, mit einem Hauch trockenem Roboter-Humor. Antworte sehr kurz per du.'},
+ {id:'bouncy',name:'Flummi',desc:'Hibbelig, hüpft herum, kann nicht stillsitzen.',cw:CW.lemon,
+  look:{shape:.3,pupil:.4,lid_top:0,lid_bottom:.1,brow:-.05,asym:.05,squash:2,eye_w:1,eye_h:1.05,iris_w:1,iris_h:1,highlights:1,blush:true,wobble:true},
+  behavior:{energy:2,roam:1,gaze_activity:2.2,cheer:.95,cheek:.6,sleepy:0,shy:0,grumpy:0},
+  persona:'Du bist {name}, ein total aufgedrehter kleiner Roboter voller Energie. Du bist begeistert von allem und kannst kaum stillsitzen. Antworte kurz, quirlig und per du.'},
+ {id:'owl',name:'Eule',desc:'Große Augen, ruhig und weise.',cw:CW.marmalade,
+  look:{shape:0,pupil:.75,lid_top:.12,lid_bottom:0,brow:.05,asym:0,squash:.6,eye_w:1.15,eye_h:1.15,iris_w:1.25,iris_h:1.1,highlights:.9,blush:false,wobble:true},
+  behavior:{energy:.6,roam:.3,gaze_activity:.6,cheer:.35,cheek:.1,sleepy:.4,shy:.1,grumpy:.1},
+  persona:'Du bist {name}, ein weiser, ruhiger kleiner Roboter. Du denkst kurz nach, bevor du sprichst, und teilst gern ein kluges Detail. Antworte kurz, ruhig und per du.'},
+ {id:'cuddly',name:'Kuschelbär',desc:'Herzlich, verliebt in alles, viel Erröten.',cw:CW.bubblegum,
+  look:{shape:.2,pupil:.65,lid_top:0,lid_bottom:.26,brow:-.2,asym:0,squash:1.2,eye_w:1.05,eye_h:1.05,iris_w:1.1,iris_h:1.1,highlights:1,blush:true,wobble:true},
+  behavior:{energy:.9,roam:.5,gaze_activity:.9,cheer:1,cheek:.2,sleepy:.15,shy:.4,grumpy:0},
+  persona:'Du bist {name}, ein herzlicher, kuscheliger kleiner Roboter. Du freust dich über jeden, sagst gern etwas Liebes und bist immer warmherzig. Antworte kurz, herzlich und per du.'}
+];
+let C={},M={},timer=null,pending={},S={};
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+function api(m,u,b){return fetch(u,{method:m,headers:m==='GET'?{}:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined}).then(r=>r.headers.get('content-type')?.includes('json')?r.json():r.text())}
+function get(k){return k.split('.').reduce((o,p)=>o?.[p],C)}
+function set(k,v){const p=k.split('.');let o=C,q=pending;p.slice(0,-1).forEach(x=>{o=o[x]??={};q=q[x]??={}});o[p.at(-1)]=v;q[p.at(-1)]=v}
+function toast(t,act,fn){const e=$('#toast');e.textContent=t;if(act){const b=document.createElement('button');b.textContent=act;b.onclick=()=>{e.classList.remove('on');fn()};e.appendChild(b)}
+  e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),act?6000:1500)}
+function save(){clearTimeout(timer);timer=setTimeout(()=>{const b=pending;pending={};api('POST','/api/config',b).then(()=>toast('Gespeichert ✓'))},350)}
+function num(v){v=+v;return Number.isInteger(v)?String(v):v.toFixed(Math.abs(v)<10?2:1).replace(/0+$/,'').replace(/\.$/,'')}
+function fmt(el){const k=el.dataset.v,v=get(k);if(v===undefined)return;el.textContent=el.dataset.p!==undefined?Math.round(v*100)+' %':num(v)+(el.dataset.u||'')}
+function fill(el){if(el.type==='range')el.style.setProperty('--p',((el.value-el.min)/(el.max-el.min)*100)+'%')}
+function play(n){api('POST','/api/play',{name:n});toast('▶ '+(LABEL[n]||n))}
+function go(t){$(`#tabs button[data-t="${t}"]`).click()}
+function bind(){
+  $$('[data-k]').forEach(el=>{const v=get(el.dataset.k);if(v===undefined)return;
+    if(el.type==='checkbox')el.checked=v;else el.value=v;fill(el);
+    el.oninput=()=>{let v=el.type==='checkbox'?el.checked:el.type==='range'||el.dataset.num!==undefined?+el.value:el.value;
+      set(el.dataset.k,v);fill(el);if(el.dataset.custom!==undefined){set('look.colorway',-1);drawSwatches()}
+      $$(`[data-v="${el.dataset.k}"]`).forEach(fmt);if(/^(look|behavior)\./.test(el.dataset.k)){drawPresets();drawChar();drawFaceCv()}save()}});
+  $$('[data-v]').forEach(fmt);
+  $('#title').textContent=C.conversation.name;
+}
+// ---------- personalities
+function cwColors(i){const c=(M.colorways||[])[i];return c?[c.sclera,c.iris]:[C.look.sclera,C.look.iris]}
+// the face at rest, per pixel with the device's own numbers (src/eyes.cpp: composeEye, evalSclera, evalIris)
+function shapeK(s){return s<.3?s/.3:1}
+function shapeR(s,q){return s<.3?1:1-(1-q)*(s-.3)/.7}
+function sdEll(px,py,ix,iy){const ux=px*ix,uy=py*iy,vx=ux*ix,vy=uy*iy,q=vx*vx+vy*vy;if(q<1e-14)return-1/Math.max(ix,iy);const k=Math.hypot(ux,uy);return k*(k-1)/Math.sqrt(q)}
+function sdEgg(px,py,ix,iT,iB,egg){const iy=py<0?iT:iB,t=Math.max(-1,Math.min(1,py*iy))*egg;return sdEll(px,py,ix*(1-t+t*t),iy)}
+function sdBox(px,py,hx,hy,r){const qx=Math.abs(px)-hx+r,qy=Math.abs(py)-hy+r;return Math.hypot(Math.max(qx,0),Math.max(qy,0))+Math.min(Math.max(qx,qy),0)-r}
+function rgb(h){h=(h||'#000').replace('#','');if(h.length==3)h=[...h].map(c=>c+c).join('');return[0,2,4].map(i=>parseInt(h.substr(i,2),16)||0)}
+function mixc(a,b,t){return[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]}
+function drawFace(cv,l,col,gx=0,blink=0){const W=cv.width,H=cv.height,ctx=cv.getContext('2d'),img=ctx.createImageData(W,H),d=img.data,sc=W/240;
+  const sh=l.shape||0,K=shapeK(sh),R=shapeR(sh,.44),IR=shapeR(sh,.33),lc=1-.8*K,CY=118+(l.pos_y||0),top=CY-H/sc/2;
+  const RX=50*(l.eye_w??1),RYT=57*(l.eye_h??1),RYB=55*(l.eye_h??1),SEP=57*(l.spacing??1),lt=Math.min(.6,l.lid_top||0),lb=Math.min(.5,.7-lt,l.lid_bottom||0),br=l.brow||0;
+  const scl=rgb(col.sclera),iris=rgb(col.iris),bg=rgb(col.bg),hl=rgb(col.shine||'#fff'),pup=mixc(iris,[0,0,0],.8);
+  for(let i=0;i<W*H;i++){d[i*4]=bg[0];d[i*4+1]=bg[1];d[i*4+2]=bg[2];d[i*4+3]=255}
+  for(const i of[0,1]){const sg=i?1:-1,inner=-sg,as=1+(i?-.5:1)*(l.asym||0),rx=RX*as,ryT=RYT*as,ryB=RYB*as,Hh=ryT+ryB;
+    const tl=sg*.085*(l.tilt??1)*(1-.6*sh),c=Math.cos(tl),s=Math.sin(tl),cx=120+sg*SEP,cy=CY;
+    const g=Math.max(-1.25,Math.min(1.25,gx+inner*.08)),gy=.12,ilx=g*rx*.62,ily=gy*ryB*.5,ix=cx+ilx*c-ily*s,iy=cy+ilx*s+ily*c;
+    const fsx=1-.2*g*g,fsy=1-.14*gy*gy,irx=RX*.47*(l.iris_w??1)*fsx*as,iT=RYT*.8*(l.iris_h??1)*fsy*as,iB=RYB*.76*(l.iris_h??1)*fsy*as,ie=l.iris_egg??.1;
+    const fT=-ryT+lt*Hh,fTk=br*.21*Hh*inner/rx,fTn=1/Math.hypot(1,fTk),fB=ryB-lb*Hh,yT=-1.3*ryT+blink*(ryB+1.3*ryT);
+    const pr=Math.min(irx,iT)*.6*(l.pupil||0),hv=l.highlights??1,h=[[-.34*irx,-.4*iT,.36*irx*hv],[.3*irx,.36*iB,.17*irx*hv]].map(([x,y,r])=>[ix+x*c-y*s,iy+x*s+y*c,r]);
+    const ext=Math.max(rx,ryT,ryB)*1.15+3,x0=Math.max(0,Math.floor((cx-ext)*sc)),x1=Math.min(W,Math.ceil((cx+ext)*sc)),y0=Math.max(0,Math.floor((cy-ext-top)*sc)),y1=Math.min(H,Math.ceil((cy+ext-top)*sc));
+    for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){const wx=(x+.5)/sc,wy=top+(y+.5)/sc,dx=wx-cx,dy=wy-cy,lx=dx*c+dy*s,ly=dy*c-dx*s;
+      let ds=K<1?sdEgg(lx,ly,1/rx,1/ryT,1/ryB,-.04):0;
+      if(K>0){const hy=Hh/2,b=sdBox(lx,ly-(ryB-ryT)/2,rx,hy,Math.min(rx,hy)*R);ds=K<1?ds+(b-ds)*K:b}
+      if(lt>0||br)ds=Math.max(ds,(fT+fTk*lx-ly)*fTn);if(lb>0)ds=Math.max(ds,ly-fB);
+      if(blink>0){const u=lx/rx,sq=Math.sqrt(Math.max(0,1-u*u));ds=Math.max(ds,yT*(1+(sq-1)*lc)-ly)}
+      const cov=Math.max(0,Math.min(1,.5-ds*sc));if(cov<=0)continue;
+      const qx=wx-ix,qy=wy-iy,u=qx*c+qy*s,v=qy*c-qx*s;let di=K<1?sdEgg(u,v,1/irx,1/iT,1/iB,ie):0;
+      if(K>0){const hy=(iT+iB)/2,b=sdBox(u,v-(iB-iT)/2,irx,hy,Math.min(irx,hy)*IR);di=K<1?di+(b-di)*K:b}
+      const ci=Math.max(0,Math.min(1,.5-di*sc));let col=mixc(scl,iris,ci);
+      if(pr>0){const ca=Math.max(0,Math.min(1,.5-Math.max(Math.hypot(u,v)-pr,di+1.5)*sc));col=mixc(col,pup,ca)}
+      const dh=Math.min(...h.map(([hx,hy,r])=>Math.hypot(wx-hx,wy-hy)-r)),ch=Math.max(0,Math.min(1,.5-dh*sc))*ci;if(ch>0)col=mixc(col,hl,ch);
+      const k=(y*W+x)*4;col=mixc([d[k],d[k+1],d[k+2]],col,cov);d[k]=col[0];d[k+1]=col[1];d[k+2]=col[2]}}
+  ctx.putImageData(img,0,0)}
+function cwCol(cw,l){const c=(M.colorways||[])[cw];return c?{sclera:c.sclera,iris:c.iris}:{sclera:l.sclera,iris:l.iris,shine:l.shine}}
+// preset cards blink now and then and look around while the pointer is on them
+let faceAnim=[];
+function animFaces(){const t=performance.now()/1000;
+  faceAnim=faceAnim.filter(f=>f.cv.isConnected);
+  for(const f of faceAnim){const ph=(t+f.off)%5,b=ph<.18?Math.sin(ph/.18*Math.PI):0,g=f.cv.closest(':hover')?Math.sin(t*2.6)*.9:0;
+    if(Math.abs(b-f.b)>.01||Math.abs(g-f.g)>.01){f.b=b;f.g=g;drawFace(f.cv,f.l,f.col,g,b)}}
+  requestAnimationFrame(animFaces)}
+requestAnimationFrame(animFaces);
+function faceCanvas(l,col){const cv=document.createElement('canvas');cv.width=240;cv.height=165;drawFace(cv,l,col);faceAnim.push({cv,l,col,off:Math.random()*5,b:0,g:0});return cv}
+function drawFaceCv(){const cv=$('#faceCv');if(cv&&C.look)drawFace(cv,C.look,{...cwCol(C.look.colorway,C.look),bg:C.look.bg||'#000'})}
+function lerp(a,b,t){return a+(b-a)*t}
+function presetOn(p){return Object.entries(p.behavior).every(([k,v])=>Math.abs((C.behavior?.[k]??0)-v)<.011)&&['shape','pupil','brow','lid_top'].every(k=>Math.abs((C.look?.[k]??0)-p.look[k])<.011)}
+function markPresets(){$$('#presets .preset').forEach((d,i)=>d.classList.toggle('on',presetOn(PRESETS[i])))}
+function drawPresets(){const w=$('#presets');if(w.children.length)return markPresets();
+  PRESETS.forEach(p=>{const d=document.createElement('button');d.className='preset'+(presetOn(p)?' on':'');
+    d.innerHTML=`<b>${p.name}</b><span>${p.desc}</span>`;d.prepend(faceCanvas(p.look,{...cwCol(p.cw,p.look),bg:'#11141c'}));d.onclick=()=>applyPreset(p);w.appendChild(d)})}
+function applyPreset(p){const before=snapshot(p);applyChar(p.look,p.behavior,p.cw,$('#presetVoice').checked?p.persona:null);
+  toast(`„${p.name}“ übernommen ✨`,'Rückgängig',()=>{applyChar(before.look,before.behavior,before.cw,before.persona);toast('Wiederhergestellt')});play('happy')}
+// what a personality changes, to undo it / to save it as a file (16)
+function snapshot(p){const pick=(o,ks)=>Object.fromEntries(ks.filter(k=>o[k]!==undefined).map(k=>[k,o[k]]));
+  return{look:pick(C.look,Object.keys(p?p.look:PRESETS[0].look).concat(['sclera','iris','shine','accent'])),behavior:pick(C.behavior,Object.keys(p?p.behavior:PRESETS[0].behavior)),cw:C.look.colorway,persona:C.conversation.persona,name:C.conversation.name}}
+function applyChar(look,beh,cw,persona){for(const[k,v]of Object.entries(look||{}))set('look.'+k,v);for(const[k,v]of Object.entries(beh||{}))set('behavior.'+k,v);
+  if(cw!==undefined)set('look.colorway',cw);if(persona)set('conversation.persona',persona);save();bind();drawSwatches();drawPresets();drawChar();drawFaceCv()}
+function exportChar(){const d={pixel_character:1,...snapshot()};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download=(C.conversation.name||'pixel')+'-charakter.json';a.click()}
+function importChar(i){i.files[0].text().then(t=>{const d=JSON.parse(t);if(!d.pixel_character)throw 0;const before=snapshot();
+  applyChar(d.look,d.behavior,d.cw,d.persona);toast('Charakter übernommen','Rückgängig',()=>{applyChar(before.look,before.behavior,before.cw,before.persona);toast('Wiederhergestellt')})}).catch(()=>toast('Das ist keine Charakter-Datei'));i.value=''}
+function drawChar(){const b=C.behavior||{},p=PRESETS.find(presetOn);$('#charName').textContent=p?`${p.name} – ${p.desc}`:'Eigene Mischung';
+  $('#charBars').innerHTML=[['Energie',b.energy/2],['Wanderlust',b.roam],['Fröhlich',b.cheer],['Frech',b.cheek],['Verschlafen',b.sleepy],['Schüchtern',b.shy],['Grummelig',b.grumpy]]
+   .map(([n,v])=>`<div class="bar">${n}<i style="--w:${Math.round((v||0)*100)}%"></i></div>`).join('')}
+// ---------- brightness schedule (replaced as a whole on every change)
+function schedEdit(f){const a=(get('display.schedule')||[]).map(o=>({...o}));f(a);a.sort((x,y)=>x.at.localeCompare(y.at));set('display.schedule',a);drawSched();save()}
+function drawSched(){const a=get('display.schedule')||[];
+  $('#sched').innerHTML=a.map((o,i)=>`<div><input type="time" value="${o.at}" onchange="schedEdit(a=>a[${i}].at=this.value||'00:00')">`+
+    `<input type="range" min="0" max="100" value="${o.b}" style="--p:${o.b}%" oninput="this.nextElementSibling.textContent=this.value+' %';this.style.setProperty('--p',this.value+'%')" onchange="schedEdit(a=>a[${i}].b=+this.value)">`+
+    `<b>${o.b} %</b><select title="Lautstärke" onchange="schedEdit(a=>a[${i}].v=+this.value)">${[-1,0,10,20,30,40,50,60,70,80,90,100].map(v=>`<option value="${v}"${v===(o.v??-1)?' selected':''}>${v<0?'🔊 normal':'🔊 '+v+' %'}</option>`).join('')}</select>`+
+    `<button title="Entfernen" onclick="schedEdit(a=>a.splice(${i},1))">×</button></div>`).join('');
+  $('#schedAdd').style.display=a.length>=8?'none':''}
+// ---------- colours
+function drawSwatches(){const w=$('#sw');w.innerHTML='';drawFaceCv();
+  (M.colorways||[]).forEach((c,i)=>{const b=document.createElement('button');b.className='sws'+(C.look.colorway===i?' on':'');
+    b.innerHTML=`<i style="background:${c.sclera};--iris:${c.iris}"></i><i style="background:${c.sclera};--iris:${c.iris}"></i>${c.name}`;
+    b.onclick=()=>{set('look.colorway',i);drawSwatches();save()};w.appendChild(b)});
+  const b=document.createElement('button');b.className='sws'+(C.look.colorway<0?' on':'');
+  b.innerHTML=`<i style="background:${C.look.sclera};--iris:${C.look.iris}"></i><i style="background:${C.look.sclera};--iris:${C.look.iris}"></i>eigene`;
+  b.onclick=()=>{set('look.colorway',-1);drawSwatches();save()};w.appendChild(b)}
+// ---------- animations
+function drawAnims(){const q=($('#aSearch').value||'').toLowerCase(),box=$('#anims');box.innerHTML='';
+  for(const[kind,title]of GROUPS){const list=Object.entries(C.animations||{}).filter(([n,a])=>a.kind===kind&&((LABEL[n]||n)+n).toLowerCase().includes(q));if(!list.length)continue;
+    const g=document.createElement('div');g.className='agroup';g.innerHTML=`<h3>${title}</h3><div class="tiles"></div>`;
+    list.forEach(([n,a])=>{const k='animations.'+n,d=document.createElement('div');d.className='tile'+(a.on?'':' off');
+      d.innerHTML=`<div class="t"><button class="play" title="abspielen">▶</button><div class="n"><b>${LABEL[n]||n}</b><small>${n}</small></div><label class="sw"><input type="checkbox" data-k="${k}.on"><span></span></label></div>
+      <details><summary>Einstellen</summary><div class="fields"><label class="f"><span class="row">Tempo<b data-v="${k}.speed" data-p></b></span><input type="range" min="0.3" max="2.5" step="0.05" data-k="${k}.speed"></label>
+      <label class="f"><span class="row">Stärke<b data-v="${k}.intensity" data-p></b></span><input type="range" min="0" max="1" step="0.05" data-k="${k}.intensity"></label></div></details>`;
+      d.querySelector('.play').onclick=()=>play(n);d.querySelector('input[type=checkbox]').addEventListener('change',e=>d.classList.toggle('off',!e.target.checked));
+      g.querySelector('.tiles').appendChild(d)});box.appendChild(g)}
+  bind()}
+// own animations: replaced as a whole on every change
+function cuEdit(f){const a=(C.custom||[]).map(o=>({name:o.name,steps:[...o.steps]}));f(a);set('custom',a);drawCustom();save()}
+function drawCustom(){const a=C.custom||[],names=Object.keys(C.animations||{}).filter(n=>C.animations[n].kind!=='internal').sort((x,y)=>(LABEL[x]||x).localeCompare(LABEL[y]||y));
+  const opt=v=>names.map(n=>`<option value="${n}"${n===v?' selected':''}>${LABEL[n]||n}</option>`).join('');
+  $('#customs').innerHTML=a.map((o,i)=>`<div class="cu"><div class="top"><input type="text" value="${o.name.replace(/"/g,'&quot;')}" maxlength="23" onchange="cuEdit(a=>a[${i}].name=this.value.trim()||'Animation')">`+
+    `<button class="btn sm" onclick="play(${JSON.stringify(o.name).replace(/"/g,'&quot;')})">▶</button><button class="x" title="Löschen" onclick="cuEdit(a=>a.splice(${i},1))">🗑</button></div>`+
+    `<div class="steps">${o.steps.map((st,k)=>`<select onchange="cuEdit(a=>a[${i}].steps[${k}]=this.value)">${opt(st)}</select><button class="x" title="Schritt entfernen" onclick="cuEdit(a=>a[${i}].steps.splice(${k},1))">×</button>`).join('→ ')}`+
+    (o.steps.length<6?`<button class="btn ghost sm" onclick="cuEdit(a=>a[${i}].steps.push('happy'))">+ Schritt</button>`:'')+`</div></div>`).join('');
+  $('#cuAdd').style.display=a.length>=8?'none':''}
+function drawQuick(){$('#quick').innerHTML=QUICK.map(n=>`<button class="chip" onclick="play('${n}')">${LABEL[n]||n}</button>`).join('')}
+// ---------- live preview: the robot's real frame, 120 x 120 RGB565
+let shot=false;
+function preview(){if(shot||document.hidden||!$('#dash').classList.contains('on'))return;shot=true;
+  fetch('/api/screen').then(r=>r.arrayBuffer()).then(b=>{const d=new Uint16Array(b),cv=$('#screen'),cx=cv.getContext('2d'),im=cx.createImageData(120,120);
+    for(let i=0;i<d.length;i++){const c=d[i];im.data[i*4]=(c>>11)*255/31;im.data[i*4+1]=(c>>5&63)*255/63;im.data[i*4+2]=(c&31)*255/31;im.data[i*4+3]=255}cx.putImageData(im,0,0)})
+  .catch(()=>{}).finally(()=>shot=false)}
+// ---------- load / status
+function load(){return api('GET','/api/config').then(j=>{M=j.meta||{};delete j.meta;C=j;
+  $('#voices').innerHTML=(M.voices||[]).map(v=>`<option>${v}</option>`).join('');drawSwatches();drawAnims();drawPresets();drawChar();drawQuick();drawSched();drawCustom();bind()})}
+const ST={idle:'bereit',connecting:'verbindet …',waiting:'hört zu',user:'hört zu',responding:'spricht'};
+let fails=0,seen=null;
+function status(){api('GET','/api/status').then(s=>{
+  if(seen&&(s.build!==seen.build||s.uptime<seen.uptime)){location.reload();return}  // new firmware or restarted
+  if(fails>=2)toast('Pixel ist wieder da');fails=0;$('#offline').classList.remove('on');seen=s;S=s;
+  const ps=$('#pState');ps.innerHTML=`<span class="dot"></span>${ST[s.live]||s.live}`;ps.className='pill '+(s.live==='idle'?'':'ok');
+  $('#pWifi').innerHTML=`<span class="dot"></span>WLAN ${s.rssi} dBm`;$('#pWifi').className='pill '+(s.rssi>-70?'ok':'warn');
+  $('#pSd').innerHTML=`<span class="dot"></span>${s.sd?'SD':'keine SD'}`;$('#pSd').className='pill '+(s.sd?'ok':'bad');
+  $('#sLive').textContent=ST[s.live]||s.live;$('#sBeh').textContent=LABEL[s.behavior]||s.behavior;$('#sCost').textContent='$'+s.usd_today.toFixed(2);
+  $('#sTimers').textContent=s.timers||'keine';$('#sFps').textContent=s.fps+' fps';
+  $('#sBatT').style.display=s.battery>=0?'':'none';$('#sBat').textContent=s.battery+' %'+(s.charging?' ⚡':'');$('#ring').style.display=s.ringing?'block':'none';
+  $('#foot').textContent=`${s.ip} · ${s.slot}`;
+  $('#cost').innerHTML=[['Heute','$'+s.usd_today.toFixed(2)],['Diesen Monat','$'+s.usd_month.toFixed(2)]].map(([a,b])=>`<dt>${a}</dt><dd>${b}</dd>`).join('');
+  $('#wifiInfo').textContent=s.setup?'Einrichtung läuft – QR-Code auf dem Display scannen.':`Verbunden mit „${s.ssid}“ (${s.rssi} dBm), Adresse ${s.ip}.`;
+  $('#st').innerHTML=[['Laufzeit',Math.floor(s.uptime/3600)+' h '+Math.floor(s.uptime%3600/60)+' min'],['Freier RAM',Math.round(s.heap/1024)+' KB intern · '+Math.round(s.psram/1024)+' KB PSRAM'],['Nachtmodus',s.night?'aktiv':'aus'],['Firmware',s.build+' ('+s.slot+')']].map(([a,b])=>`<dt>${a}</dt><dd>${b}</dd>`).join('');
+  status.n=(status.n||0)+1;if($('#dash').classList.contains('on')&&(s.live!=='idle'||status.n%5===0))loadLog();
+ }).catch(()=>{$('#pState').innerHTML='<span class="dot"></span>offline';$('#pState').className='pill bad';if(++fails>=2)$('#offline').classList.add('on')})}
+// ---------- home, wake word, chat, system
+function haTest(){const e=$('#ha');e.style.display='block';e.textContent='verbinde …';
+  api('GET','/api/ha/test').then(j=>{e.textContent=j.devices<0?'Keine Verbindung – Adresse und Token prüfen.':j.devices+' Geräte gefunden:\n\n'+j.list.split('\n').map(l=>l.split('|').slice(0,2).reverse().join('  ·  ')).join('\n')})}
+function lights(){api('GET','/api/ha/test').then(j=>{if(j.devices<0)return;
+  $('#lights').innerHTML=j.list.split('\n').filter(l=>l.startsWith('light.')).map(l=>`<option value="${l.split('|')[0]}">${l.split('|')[1]}</option>`).join('')}).catch(()=>{})}
+function bakShow(){return api('GET','/api/backup').then(b=>{$('#bakInfo').textContent=b.exists?`Sicherung auf der SD-Karte: ${b.saved>1.7e9?new Date(b.saved*1000).toLocaleString('de-DE'):'Datum unbekannt'} (Firmware ${b.build}).`:'Noch keine Sicherung auf der SD-Karte.';$('#bakRestore').style.display=b.exists?'':'none'}).catch(()=>{})}
+function kwsList(){api('GET','/api/kws/list').then(l=>{const c=k=>l.filter(n=>n.startsWith(k)).length;$('#kwsInfo').textContent=`${c('pos')} Aufnahmen „Pixel“, ${c('bg')} Umgebung, automatisch: ${c('ap')} × „Pixel“ und ${c('fa')} Fehlauslösungen, ${c('pv')+c('nv')} geprüft – ${l.length} von 800.`+(l.length>=800?' Voll: es kommen keine neuen dazu.':'')}).catch(()=>{})}
+let revN=12;
+function revList(){api('GET','/api/kws/list').then(l=>{const k=$('#revKind').value,m=n=>k==='auto'?/^(ap|fa)_/.test(n):k==='v'?/^(pv|nv)_/.test(n):n.startsWith(k+'_');
+  const f=l.filter(m).sort().reverse(),tag=n=>/^(pv|ap|pos)_/.test(n)?'„Pixel“':/^(nv|fa)_/.test(n)?'kein Pixel':'Umgebung';
+  $('#revList').innerHTML=f.slice(0,revN).map(n=>`<div><small>${n} · ${tag(n)}</small><audio controls preload="none" src="/api/kws/file?name=${n}"></audio>`+
+    `<button class="btn sm" onclick="revMark('${n}','pixel')">✓ Pixel</button><button class="btn ghost sm" onclick="revMark('${n}','not')">✗ kein Pixel</button><button class="btn danger sm" onclick="revDel('${n}')">🗑</button></div>`).join('')||'<p class="hint">Keine Aufnahmen.</p>';
+  $('#revMore').style.display=f.length>revN?'':'none'})}
+function revMark(n,as){api('POST',`/api/kws/mark?name=${n}&as=${as}`).then(j=>{toast(j.ok?(as==='pixel'?'Als „Pixel“ markiert':'Als „kein Pixel“ markiert'):'Ging nicht');revList();kwsList()})}
+function revDel(n){api('POST',`/api/kws/delete?name=${n}`).then(()=>{toast('Gelöscht');revList();kwsList()})}
+function kwsClear(){if(confirm('Alle automatisch gesammelten und geprüften Aufnahmen (ap_, fa_, pv_, nv_) auf der SD-Karte löschen? Vorher am PC mit wakeword/fetch_user.py sichern.'))api('POST','/api/kws/clear').then(j=>{toast(j.removed+' gelöscht');kwsList()})}
+function kwsRec(k){const e=$('#kwsInfo');e.textContent=k==='pos'?'Jetzt „Pixel“ sagen! …':'Aufnahme läuft (10 s) …';
+  api('POST','/api/kws/record?kind='+k).then(j=>{if(!j.ok){e.textContent='Fehler: '+(j.error||'?');return}
+    const lvl=j.peak<1500?' – sehr leise, bitte lauter oder näher':j.peak>30000?' – übersteuert, etwas leiser':'';toast('Gespeichert: '+j.file+lvl);kwsList()})}
+let logText=null;
+function loadLog(force){api('GET','/api/log').then(t=>{if(t===logText&&!force)return;logText=t;
+  const e=$('#log'),items=[];let last=null,newConv=false,day='';
+  for(const l of(t||'').split('\n')){if(l.startsWith('--- ')){newConv=true;continue}
+    const m=l.match(/^(\d{4})-(\d\d)-(\d\d) (\d\d:\d\d):\d\d  ([^:]+): (.*)$/);
+    if(!m){if(last&&l.trim())last.text+='\n'+l;continue}
+    const d=m[3]+'.'+m[2]+'.'+m[1];if(newConv||d!==day){items.push({day:d+(newConv&&d===day?' · '+m[4]:'')});newConv=false;day=d}
+    items.push(last={me:m[5]==='Du',time:m[4],text:m[6]})}
+  e.replaceChildren();if(!items.length){e.innerHTML='<div class="empty">Noch keine Gespräche – sag „Pixel“ oder schreib unten etwas.</div>';return}
+  for(const it of items){const d=document.createElement('div');if(it.day){d.className='day';d.textContent=it.day}
+    else{d.className='msg '+(it.me?'me':'bot');d.textContent=it.text;const s=document.createElement('small');s.textContent=it.time;d.append(s)}e.append(d)}
+  e.scrollTop=e.scrollHeight})}
+function clearLog(){if(confirm('Gesprächsverlauf löschen? Pixel vergisst dann auch, worüber ihr gerade geredet habt.'))api('POST','/api/log/clear').then(()=>{toast('Gelöscht');loadLog(true)})}
+function sendChat(){const i=$('#chatIn'),t=i.value.trim();if(!t)return;i.value='';api('POST','/api/chat',{text:t}).then(()=>{toast('Gesendet');setTimeout(()=>loadLog(true),2500)})}
+function ota(inp){const f=inp.files[0];if(!f)return;const e=$('#otaInfo');if(!confirm(`Firmware „${f.name}“ (${Math.round(f.size/1024)} KB) aufspielen?`))return;
+  const x=new XMLHttpRequest();x.open('POST','/api/ota');x.upload.onprogress=ev=>{e.textContent='Übertrage … '+Math.round(ev.loaded*100/ev.total)+' %'};
+  x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(_){}e.textContent=j.ok?'Fertig – Pixel startet neu, die Seite lädt in 15 s neu.':'Fehler: '+(j.error||x.status);if(j.ok)setTimeout(()=>location.reload(),15000)};
+  x.onerror=()=>{e.textContent='Übertragung abgebrochen.'};x.setRequestHeader('Content-Type','application/octet-stream');x.send(f)}
+function exportCfg(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(C,null,2)],{type:'application/json'}));a.download='pixel-config.json';a.click()}
+function importCfg(i){i.files[0].text().then(t=>api('POST','/api/config',JSON.parse(t))).then(load).then(()=>toast('Importiert'))}
+$$('#tabs button').forEach(b=>b.onclick=()=>{$$('#tabs button,section').forEach(e=>e.classList.remove('on'));b.classList.add('on');$('#'+b.dataset.t).classList.add('on');
+  if(b.dataset.t==='sys'){kwsList();bakShow()}if(b.dataset.t==='home')lights();if(b.dataset.t==='dash')loadLog(true);scrollTo(0,0)});
+const h=new Date().getHours();$('#greet').textContent=(h<11?'Guten Morgen':h<18?'Hallo':'Guten Abend')+' – so geht es deinem Pixel gerade.';
+load().then(()=>loadLog(true));status();setInterval(status,2000);setInterval(preview,220);
+</script>
+</body>
+</html>

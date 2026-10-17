@@ -1,0 +1,16 @@
+// Full screen info page instead of the eyes (setup): a title, a QR code and up to two lines of text.
+#pragma once
+#include <stdint.h>
+
+namespace screen {
+
+void show(const char* title, const char* qr, const char* line1, const char* line2, const char* line3 = "");
+// buttons to tap (up to 4); danger: index drawn in red, -1 none
+void menu(const char* title, const char* const* items, int n, int danger);
+int hit(int x, int y);  // menu button under a tap, -1 = none
+void hide();
+bool active();
+uint32_t version();  // changes whenever the page changes (redraw)
+void render(uint16_t* buf, int x0, int y0, int x1, int y1);  // RGB565 like eyes::render
+
+}  // namespace screen

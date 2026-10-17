@@ -1,0 +1,16 @@
+src/secrets.h
+api.txt
+.pio/
+managed_components/
+openai.txt
+wakeword/.venv/
+wakeword/data/
+# generated / built
+dist/
+src/web_ui.h
+sim/sim
+wakeword/ctest
+wakeword/ftest
+__pycache__/
+wakeword/*.log
+wakeword/kws_pixel_round*.pt

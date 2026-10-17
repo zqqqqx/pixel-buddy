@@ -1,0 +1,7 @@
+dependencies:
+  espressif/esp-sr: "^2.6.0"
+  espressif/cjson: "*"
+  espressif/esp_websocket_client: "*"
+  espressif/mdns: "*"
+  espressif/qrcode: "*"
+  espressif/led_strip: "^3.0.0"
