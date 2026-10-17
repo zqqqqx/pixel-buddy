@@ -23,7 +23,9 @@ rechte Auge ist ein kleines bisschen größer und sitzt höher (so wie Pixel sel
 |---|---|
 | [`logo.svg`](logo.svg) | App-Symbol, Favicon, Avatar (quadratisch) |
 | [`wordmark.svg`](wordmark.svg) | Kopfzeilen, README, Installationsseite |
-| `screen.cpp` (`screen::splash`) | Startbildschirm und Update-Anzeige auf dem Display |
+| `screen.cpp` (`screen::splash`) | Startbildschirm und Update-Anzeige auf dem Display (Bild unten) |
+
+<img src="display.png" width="420" alt="Startbildschirm und Update-Anzeige auf dem Display">
 
 Das Logo nicht verzerren, nicht umfärben, nicht auf unruhigen Hintergrund stellen. Mindestgröße 16 px.
 
