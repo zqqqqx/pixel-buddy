@@ -36,6 +36,9 @@ CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y
 # software AES: the hardware path needs internal DMA bounce buffers for every TLS record (PSRAM buffers),
 # which ran out with two TLS connections
 # CONFIG_MBEDTLS_HARDWARE_AES is not set
+# software SHA too: for certificates in PSRAM the SHA DMA needs internal bounce buffers, the RSA certificate
+# of GitHub's download server then failed the handshake (MBEDTLS_ERR_SSL_HW_ACCEL_FAILED) - no updates
+# CONFIG_MBEDTLS_HARDWARE_SHA is not set
 # web server + warm WebSocket + helper HTTPS + mDNS/SNTP need more than the default 10
 CONFIG_LWIP_MAX_SOCKETS=16
 

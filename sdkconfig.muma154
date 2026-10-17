@@ -3623,13 +3623,16 @@ CONFIG_MBEDTLS_SHA512_C=y
 # CONFIG_MBEDTLS_SHA3_C is not set
 # default:
 CONFIG_MBEDTLS_ROM_MD5=y
+# default:
+# CONFIG_MBEDTLS_SHA256_SMALLER is not set
+# default:
+# CONFIG_MBEDTLS_SHA512_SMALLER is not set
 # end of Hash functions
 
 #
 # Hardware Acceleration
 #
-# default:
-CONFIG_MBEDTLS_HARDWARE_SHA=y
+# CONFIG_MBEDTLS_HARDWARE_SHA is not set
 # default:
 CONFIG_MBEDTLS_HARDWARE_MPI=y
 # default:

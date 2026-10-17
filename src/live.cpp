@@ -864,7 +864,8 @@ static void buildInstructions(char* out, int cap, const char* homeList) {
   eyes::Look lk;
   settings::look(lk);
   snprintf(facts, sizeof(facts),
-           "\nAktuell: %02d.%02d.%04d %02d:%02d Uhr. Deine IP-Adresse %s, WLAN-Signal %d dBm, Laufzeit %lld Minuten. "
+           "\nAktuell: %02d.%02d.%04d %02d:%02d Uhr. Du bist Pixel Buddy Version " PIXEL_VERSION ". Deine IP-Adresse %s, "
+           "WLAN-Signal %d dBm, Laufzeit %lld Minuten. "
            "Farbschema %s, Lautstaerke %d Prozent, Helligkeit %d Prozent, Stimme %s, Sprachmodell %s, "
            "Hintergrund-Modell %s.",
            tmv.tm_mday, tmv.tm_mon + 1, tmv.tm_year + 1900, tmv.tm_hour, tmv.tm_min, net::ip(), net::rssi(),
@@ -1135,7 +1136,8 @@ static bool sendStartRealtime(bool resume) {
   time_t now = time(nullptr);
   struct tm tmv;
   localtime_r(&now, &tmv);
-  snprintf(facts, sizeof(facts), "\nAktuell: %02d.%02d.%04d %02d:%02d Uhr. Deine IP-Adresse %s, Lautstaerke %d Prozent, "
+  snprintf(facts, sizeof(facts), "\nAktuell: %02d.%02d.%04d %02d:%02d Uhr. Du bist Pixel Buddy Version " PIXEL_VERSION
+           ". Deine IP-Adresse %s, Lautstaerke %d Prozent, "
            "Stimme %s, Sprachmodell %s.", tmv.tm_mday, tmv.tm_mon + 1, tmv.tm_year + 1900, tmv.tm_hour, tmv.tm_min,
            net::ip(), cv.volume, rtVoice(cv.voice), cv.model);
   snprintf(ins, ICAP,
