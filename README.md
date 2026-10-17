@@ -4,7 +4,31 @@ Firmware für das Spotpear ESP32-S3 „muma“ Board (1,54″-Display 240×240 m
 microSD). Pixel hat selbst gerenderte Augen, hört auf „Pixel“ (eigenes Netz, offline) und redet live über
 OpenAI (GPT-Live oder die Realtime API).
 
+<p align="center"><img src="docs/pixel.gif" width="300" alt="Pixel: animierte Augen"></p>
+
+Alle Bilder der Augen kommen aus dem Simulator (`sim/`), der denselben Renderer benutzt wie das Display.
+
+**Zehn Persönlichkeiten** – Gesicht, Farben und Verhalten auf einen Klick, danach alles einzeln einstellbar:
+
+![Persönlichkeiten](docs/personalities.png)
+
+**Symbole in den Augen** – WLAN, Nutzungslimit, Akku, Lampen, Timer, Wecker, Wetter, Rückfragen:
+
+![Symbole](docs/symbols.png)
+
+**Webinterface** (http://pixel.local) – Live-Vorschau, Charakter, Gesicht, Animationen, Stimme & KI, Zuhause, Gerät:
+
+| Übersicht | Charakter |
+|---|---|
+| ![Übersicht](docs/web-dash.png) | ![Charakter](docs/web-char.png) |
+| **Gesicht** | **Animationen** |
+| ![Gesicht](docs/web-face.png) | ![Animationen](docs/web-anim.png) |
+
 ## Installieren
+
+**Fertige Firmware:** unter [Releases](../../releases) – `pixel.bin` (komplette Installation, z.B. mit der
+Installationsseite aus `tools/dist.sh` oder `esptool.py write_flash 0x0 pixel.bin`) und `pixel-update.bin`
+(Update über WLAN im Webinterface).
 
 **Ohne Entwicklungsumgebung:** `tools/dist.sh` erzeugt in `dist/` eine fertige Firmware ohne private
 Zugangsdaten und eine Installationsseite. Den Ordner per https veröffentlichen (z.B. GitHub Pages) oder lokal
