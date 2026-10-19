@@ -73,11 +73,16 @@ static int wnChunk = 0;
 static int16_t* wnBuf = nullptr;
 static int wnFill = 0;
 
-static void wakeInit() {
-  srmodel_list_t* models = esp_srmodel_init("model");
-  char* name = models ? esp_srmodel_filter(models, ESP_WN_PREFIX, nullptr) : nullptr;
+static srmodel_list_t* models = nullptr;
+static volatile bool wnStopped = false;
+static void wakeInit(const char* model) {
+  models = esp_srmodel_init("model");
+  if (!model) return;  // Pixel's own wake word: no WakeNet (saves memory and time)
+  char* name = nullptr;
+  for (int i = 0; models && i < models->num && !name; ++i)
+    if (!strcmp(models->model_name[i], model)) name = models->model_name[i];
   if (!name) {
-    ESP_LOGW(TAG, "no wake word model in the 'model' partition");
+    ESP_LOGW(TAG, "wake word model %s is not in the 'model' partition", model);
     return;
   }
   wn = esp_wn_handle_from_name(name);
@@ -92,7 +97,7 @@ static void wakeInit() {
   ESP_LOGI(TAG, "wake word ready: %s (%s), chunk %d", name, wn->get_word_name(wnData, 1), wnChunk);
 }
 static void wakeFeed(int16_t s) {
-  if (!wn) return;
+  if (!wn || wnStopped) return;
   wnBuf[wnFill++] = s;
   if (wnFill < wnChunk) return;
   wnFill = 0;
@@ -104,7 +109,7 @@ static void wakeFeed(int16_t s) {
   }
 }
 #else
-static void wakeInit() {}
+static void wakeInit(const char*) {}
 static void wakeFeed(int16_t) {}
 #endif
 
@@ -416,7 +421,7 @@ static void playerTask(void*) {
 
 // ---- uplink: microphone PCM for the live session
 
-bool start() {
+bool start(const char* wakeModel) {
   ring = (int16_t*)heap_caps_malloc(RING * 2, MALLOC_CAP_SPIRAM);
   // 6 s: everything said after the wake word is kept while the session starts
   up = xStreamBufferCreateWithCaps(6 * 32000, 1, MALLOC_CAP_SPIRAM);
@@ -431,7 +436,7 @@ bool start() {
     return false;
   }
   ESP_LOGI(TAG, "ES8311 ready, chip id %02x %02x", rd(0xFD), rd(0xFE));
-  wakeInit();  // reads the model from flash: must run on an internal-RAM stack
+  wakeInit(wakeModel);  // reads the model from flash: must run on an internal-RAM stack
   kws::init();
   // stack in PSRAM: internal RAM is needed for WiFi / TLS
   xTaskCreatePinnedToCoreWithCaps(task, "mic", 12288, nullptr, 6, nullptr, 0, MALLOC_CAP_SPIRAM);
@@ -492,6 +497,19 @@ void setWakeWords(bool pixel, bool halloEsp, float sensitivity) {
   usePixel = pixel;
   useEsp = halloEsp;
   kws::setSensitivity(sensitivity);
+}
+void wakeStop() {
+#if CFG_WAKEWORD_ENABLE
+  wnStopped = true;
+  vTaskDelay(pdMS_TO_TICKS(200));  // a detection running right now is through
+#endif
+}
+bool hasWakeModel(const char* model) {
+#if CFG_WAKEWORD_ENABLE
+  for (int i = 0; models && i < models->num; ++i)
+    if (!strcmp(models->model_name[i], model)) return true;
+#endif
+  return false;
 }
 bool audible() { return loudAhead || esp_timer_get_time() - lastLoudUs < 250000; }
 void streamPush(const int16_t* pcm, int n) {

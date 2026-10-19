@@ -33,6 +33,8 @@ static volatile bool online = false;
 static char ipStr[20] = "-";
 static char staSsid[33] = "", staPass[65] = "";
 static char hsSsid[33] = "", hsPass[65] = "";  // hotspot mode network
+static char oldSsid[33] = "", oldPass[65] = "";  // a network change from the web interface: back to this one ...
+static volatile bool trial = false;              // ... if the new one does not work within 25 s
 static bool hsOn = false;
 static volatile bool setupOn = false;
 static char apSsid[33] = "", apPass[12] = "";
@@ -144,6 +146,7 @@ static void applySta() {
 // is reported. The AP closes 2 min after a successful setup (the page shows the new address), or 10 min
 // after it was opened while the robot is online anyway. Meanwhile the known network is retried every
 // minute (e.g. the router was still starting after a power cut).
+static void store(const char* ssid, const char* pass);
 static void watchTask(void*) {
   int64_t retry = 0;
   for (;;) {
@@ -152,6 +155,18 @@ static void watchTask(void*) {
     if (setupOn && joinState == 1 && !online && now - joinStart > 20000000) {
       joinState = 3;
       esp_wifi_disconnect();
+    }
+    if (trial && joinState == 2) trial = false;  // the new network works
+    if (trial && now - joinStart > 25000000) {
+      trial = false;
+      joinState = 3;
+      ESP_LOGW(TAG, "\"%s\" did not work, back to \"%s\"", staSsid, oldSsid);
+      store(oldSsid, oldPass);
+      snprintf(staSsid, sizeof(staSsid), "%s", oldSsid);
+      snprintf(staPass, sizeof(staPass), "%s", oldPass);
+      esp_wifi_disconnect();
+      applySta();
+      esp_wifi_connect();
     }
     if (setupOn && online && joinState == 2 && now - connectedAt > 120000000) stopAp();
     if (setupOn && online && joinState != 1 && now - apOpenedAt > 600000000) stopAp();
@@ -183,7 +198,12 @@ static void wifiStart() {
     hsOn = on;
     nvs_close(h);
   }
-  if (!staSsid[0] && WIFI_SSID[0]) {  // nothing from the setup: the network built into the firmware
+  uint8_t wantSetup = 0;  // "forget the WiFi" in the web interface: the setup, not the built-in network
+  if (nvs_open("pixel_wifi", NVS_READONLY, &h) == ESP_OK) {
+    nvs_get_u8(h, "setup", &wantSetup);
+    nvs_close(h);
+  }
+  if (!staSsid[0] && WIFI_SSID[0] && !wantSetup) {  // nothing from the setup: the network built into the firmware
     snprintf(staSsid, sizeof(staSsid), "%s", WIFI_SSID);
     snprintf(staPass, sizeof(staPass), "%s", WIFI_PASS);
     // kept like one from the setup: an update from GitHub (built without secrets.h) still knows it
@@ -231,10 +251,11 @@ bool setupActive() { return setupOn; }
 const char* setupSsid() { return apSsid; }
 const char* setupPass() { return apPass; }
 int joinStatus() { return joinState; }
-void forgetWifi() {
+void forgetWifi(bool setup) {
   nvs_handle_t h;
   if (nvs_open("pixel_wifi", NVS_READWRITE, &h) == ESP_OK) {
     nvs_erase_all(h);
+    if (setup) nvs_set_u8(h, "setup", 1);
     nvs_commit(h);
     nvs_close(h);
   }
@@ -243,6 +264,16 @@ void stopSetup() {
   if (online) stopAp();
 }
 
+static void store(const char* ssid, const char* pass) {
+  nvs_handle_t h;
+  if (nvs_open("pixel_wifi", NVS_READWRITE, &h) == ESP_OK) {
+    nvs_set_str(h, "ssid", ssid);
+    nvs_set_str(h, "pass", pass);
+    nvs_erase_key(h, "setup");
+    nvs_commit(h);
+    nvs_close(h);
+  }
+}
 static bool valid(const char* ssid, const char* pass) {
   if (!ssid[0] || strlen(ssid) > 32 || strlen(pass) > 64 || (pass[0] && strlen(pass) < 8)) return false;
   return !strpbrk(ssid, "\"\\");  // it goes into JSON (status) as is
@@ -250,13 +281,13 @@ static bool valid(const char* ssid, const char* pass) {
 
 bool saveWifi(const char* ssid, const char* pass) {
   if (!valid(ssid, pass)) return false;
-  nvs_handle_t h;
-  if (nvs_open("pixel_wifi", NVS_READWRITE, &h) == ESP_OK) {
-    nvs_set_str(h, "ssid", ssid);
-    nvs_set_str(h, "pass", pass);
-    nvs_commit(h);
-    nvs_close(h);
+  if (!setupOn && !hsOn) {  // online from the web interface: a trial, the old network stays as fallback
+    snprintf(oldSsid, sizeof(oldSsid), "%s", staSsid);
+    snprintf(oldPass, sizeof(oldPass), "%s", staPass);
+    trial = oldSsid[0] != 0;
   }
+  store(ssid, pass);
+  if (hsOn) return true;  // on the way: the home network is only stored, it counts from the next start at home
   snprintf(staSsid, sizeof(staSsid), "%s", ssid);
   snprintf(staPass, sizeof(staPass), "%s", pass);
   joinStart = esp_timer_get_time();

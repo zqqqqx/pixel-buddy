@@ -1,7 +1,7 @@
 # Wake word "Pixel"
 
-A small own keyword-spotting network that runs on the ESP32-S3 next to Espressif's
-"Hallo ESP" (WakeNet). Everything happens offline on the robot; the PC is only needed
+A small own keyword-spotting network that runs on the ESP32-S3 (the other names – Buddy, Jarvis …
+– use Espressif's WakeNet models). Everything happens offline on the robot; the PC is only needed
 for training.
 
 | Step | File | What it does |
@@ -16,15 +16,15 @@ for training.
 
 ## Make it better with your own voice
 
-1. Web interface -> System -> "Aktivierungswort Pixel verbessern": say "Pixel" ~20 times
-   (quiet, loud, near, far) and record some background (TV, talking, music - without "Pixel").
+1. App -> Settings -> System -> Train the wake word -> "Record the name": say "Pixel" ~20 times
+   (quiet, loud, near, far) and "Record the room": some background (TV, talking, music - without "Pixel").
 2. On the PC: `./retrain.sh` - downloads the recordings, trains, checks the C code, flashes.
 
 Every 5th own recording is kept back for validation and decides which epoch is exported. Your recordings
 count 6x in training. Every activation is recorded (2 s up to the wake word + 4 s after it). When somebody
 spoke afterwards, the robot keeps the "Pixel" (2 s up to the detection) as `ap_*.wav`; when nobody said
 anything (no words in the transcript), all of it as a false wake-up `fa_*.wav`. At most 800 recordings stay on
-the card (web interface -> "Automatische löschen" once they are on the PC). `fetch_user.py` puts `ap_` into the
+the card (app -> "Delete automatic recordings" once they are on the PC). `fetch_user.py` puts `ap_` into the
 positives (training only) and `fa_` into the negatives; `eval_user.py` tests the network on them. A real
 "Pixel" with nothing after it lands in `fa_` too - listen to them before training.
 

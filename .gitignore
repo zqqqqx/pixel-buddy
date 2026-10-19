@@ -8,6 +8,7 @@ wakeword/data/
 # generated / built
 dist/
 src/web_ui.h
+src/models_sha.h
 sim/sim
 wakeword/ctest
 wakeword/ftest

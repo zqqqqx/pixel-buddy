@@ -23,7 +23,7 @@ static const char* TAG = "ha";
 
 bool configured(const settings::Conv& c) { return c.haUrl[0] && c.haToken[0]; }
 // hotspot mode: Home Assistant is at home, out of reach. The tools stay and say so.
-static const char* AWAY = "Pixel ist im Hotspot-Modus unterwegs - das Smart Home geht nur zu Hause im Heimnetz.";
+static const char* AWAY = "Pixel is on the go in hotspot mode - the smart home only works at home on the home WiFi.";
 
 // one request; response text (0-terminated) in resp, returns HTTP status or -1
 static int call(const settings::Conv& c, const char* method, const char* path, const char* body, char* resp, int cap) {
@@ -56,7 +56,7 @@ static int call(const settings::Conv& c, const char* method, const char* path, c
 int listDevices(const settings::Conv& c, char* out, int cap) {
   if (!configured(c)) return -1;
   if (net::hotspot()) {
-    snprintf(out, cap, "(keine erreichbar: %s)", AWAY);
+    snprintf(out, cap, "(none reachable: %s)", AWAY);
     return 0;
   }
   const char* tpl =
@@ -279,7 +279,7 @@ bool setLight(const settings::Conv& c, const cJSON* a, char* result, int cap, ui
     return false;
   }
   if (!configured(c) || !cJSON_IsString(e) || strncmp(e->valuestring, "light.", 6) || strlen(e->valuestring) >= 48) {
-    snprintf(result, cap, configured(c) ? "entity_id muss eine light.* aus der Liste sein" : "Smart Home ist nicht eingerichtet.");
+    snprintf(result, cap, configured(c) ? "entity_id must be a light.* from the list" : "No smart home is set up.");
     return false;
   }
   Mem& m = memFor(e->valuestring);
@@ -325,8 +325,8 @@ bool setLight(const settings::Conv& c, const cJSON* a, char* result, int cap, ui
   EXT_RAM_BSS_ATTR static char resp[8192];
   int st = call(c, "POST", off ? "/api/services/light/turn_off" : "/api/services/light/turn_on", b, resp, sizeof(resp));
   if (st != 200) {
-    snprintf(result, cap, "Home Assistant hat das abgelehnt (Fehler %d)%s", st,
-             st == 400 ? " - diese Lampe kann das vermutlich nicht (Farbe, Weisston oder Effekt)" : "");
+    snprintf(result, cap, "Home Assistant refused (error %d)%s", st,
+             st == 400 ? " - this lamp probably cannot do that (colour, white tone or effect)" : "");
     cJSON_free(b);
     return false;
   }
@@ -357,7 +357,7 @@ bool setLight(const settings::Conv& c, const cJSON* a, char* result, int cap, ui
       o.at = esp_timer_get_time();
       break;
     }
-  snprintf(result, cap, "Erledigt: %s", b);
+  snprintf(result, cap, "Done: %s", b);
   cJSON_free(b);
   return true;
 }
@@ -365,7 +365,7 @@ bool setLight(const settings::Conv& c, const cJSON* a, char* result, int cap, ui
 bool control(const settings::Conv& c, const char* entity, const char* action, double value, bool hasValue,
              char* result, int cap) {
   if (!configured(c)) {
-    snprintf(result, cap, "Smart Home ist nicht eingerichtet.");
+    snprintf(result, cap, "No smart home is set up.");
     return false;
   }
   if (net::hotspot()) {
@@ -375,7 +375,7 @@ bool control(const settings::Conv& c, const char* entity, const char* action, do
   char domain[32] = {0};
   const char* dot = strchr(entity, '.');
   if (!dot || dot - entity >= (int)sizeof(domain)) {
-    snprintf(result, cap, "Unbekanntes Geraet %s - nutze die entity_id aus der Liste.", entity);
+    snprintf(result, cap, "Unknown device %s - use the entity_id from the list.", entity);
     return false;
   }
   memcpy(domain, entity, dot - entity);
@@ -385,7 +385,7 @@ bool control(const settings::Conv& c, const char* entity, const char* action, do
     char path[160];
     snprintf(path, sizeof(path), "/api/states/%s", entity);
     if (call(c, "GET", path, nullptr, resp, sizeof(resp)) != 200) {
-      snprintf(result, cap, "Konnte %s nicht abfragen.", entity);
+      snprintf(result, cap, "Could not ask %s.", entity);
       return false;
     }
     cJSON* j = cJSON_Parse(resp);
@@ -396,9 +396,9 @@ bool control(const settings::Conv& c, const char* entity, const char* action, do
     const cJSON* b = cJSON_GetObjectItem(a, "brightness");
     snprintf(result, cap, "%s: %s%s%s", entity, cJSON_IsString(s) ? s->valuestring : "?",
              cJSON_IsString(u) ? u->valuestring : "", "");
-    if (cJSON_IsNumber(t)) snprintf(result + strlen(result), cap - strlen(result), ", aktuell %.1f Grad", t->valuedouble);
+    if (cJSON_IsNumber(t)) snprintf(result + strlen(result), cap - strlen(result), ", currently %.1f degrees", t->valuedouble);
     if (cJSON_IsNumber(b))
-      snprintf(result + strlen(result), cap - strlen(result), ", Helligkeit %d%%", (int)(b->valuedouble * 100 / 255));
+      snprintf(result + strlen(result), cap - strlen(result), ", brightness %d%%", (int)(b->valuedouble * 100 / 255));
     const Mem* m = nullptr;
     for (auto& x : mem)
       if (!strcmp(x.entity, entity) && x.hasRgb && x.misreports) m = &x;
@@ -408,14 +408,14 @@ bool control(const settings::Conv& c, const char* entity, const char* action, do
     const cJSON* fx = cJSON_GetObjectItem(a, "effect");
     int n = strlen(result);
     if (m)
-      snprintf(result + n, cap - n, ", Farbe RGB %d,%d,%d", (int)(m->rgb >> 16), (int)(m->rgb >> 8 & 255), (int)(m->rgb & 255));
+      snprintf(result + n, cap - n, ", colour RGB %d,%d,%d", (int)(m->rgb >> 16), (int)(m->rgb >> 8 & 255), (int)(m->rgb & 255));
     else if (cJSON_IsString(mode) && !strcmp(mode->valuestring, "color_temp") && cJSON_IsNumber(k))
-      snprintf(result + n, cap - n, ", Weisston %d K", k->valueint);
+      snprintf(result + n, cap - n, ", white tone %d K", k->valueint);
     else if (cJSON_GetArraySize(rc) == 3)
-      snprintf(result + n, cap - n, ", Farbe RGB %d,%d,%d", cJSON_GetArrayItem(rc, 0)->valueint,
+      snprintf(result + n, cap - n, ", colour RGB %d,%d,%d", cJSON_GetArrayItem(rc, 0)->valueint,
                cJSON_GetArrayItem(rc, 1)->valueint, cJSON_GetArrayItem(rc, 2)->valueint);
     n = strlen(result);
-    if (cJSON_IsString(fx)) snprintf(result + n, cap - n, ", Effekt %s", fx->valuestring);
+    if (cJSON_IsString(fx)) snprintf(result + n, cap - n, ", effect %s", fx->valuestring);
     if (j) cJSON_Delete(j);
     return true;
   }

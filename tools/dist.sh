@@ -22,6 +22,7 @@ cat > dist/manifest.json <<JSON
  "builds": [{"chipFamily": "ESP32-S3", "parts": [{"path": "pixel.bin", "offset": 0}]}]}
 JSON
 cp tools/install.html dist/index.html
-cp $B/firmware.bin dist/pixel-update.bin   # for "Firmware-Update" in the web interface
-echo "dist/ ready: pixel.bin (full install), pixel-update.bin (update over WiFi), index.html"
+cp $B/firmware.bin dist/pixel-update.bin   # for the update over WiFi in the app
+cp $B/srmodels/srmodels.bin dist/pixel-models.bin   # the wake word models, fetched after an update (update.cpp)
+echo "dist/ ready: pixel.bin (full install), pixel-update.bin + pixel-models.bin (update over WiFi), index.html"
 "$PIO" run >/dev/null   # back to the own build (with secrets.h) for the next upload

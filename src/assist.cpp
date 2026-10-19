@@ -86,7 +86,7 @@ static bool contains(const char* hay, const char* needle) {  // case-insensitive
   return !needle[0];
 }
 int cancel(const char* label) {
-  bool all = !label || !label[0] || contains(label, "alle");
+  bool all = !label || !label[0] || (contains(label, "alle") || contains(label, "all"));
   xSemaphoreTake(mtx, portMAX_DELAY);
   int k = 0, removed = 0;
   for (int i = 0; i < tmN; ++i) {
@@ -102,13 +102,13 @@ int cancel(const char* label) {
 }
 void listTimers(char* out, int cap) {
   xSemaphoreTake(mtx, portMAX_DELAY);
-  int n = snprintf(out, cap, tmN ? "" : "Keine Timer oder Wecker gestellt.");
+  int n = snprintf(out, cap, tmN ? "" : "No timers or alarms set.");
   time_t now = time(nullptr);
   for (int i = 0; i < tmN && n < cap; ++i) {
     struct tm t;
     localtime_r(&tm_[i].due, &t);
     long left = (long)(tm_[i].due - now);
-    n += snprintf(out + n, cap - n, "%s um %02d:%02d (in %ld min). ", tm_[i].label[0] ? tm_[i].label : "Timer",
+    n += snprintf(out + n, cap - n, "%s at %02d:%02d (in %ld min). ", tm_[i].label[0] ? tm_[i].label : "Timer",
                   t.tm_hour, t.tm_min, left > 0 ? (left + 59) / 60 : 0);
   }
   xSemaphoreGive(mtx);

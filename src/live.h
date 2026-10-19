@@ -23,6 +23,8 @@ bool active();                      // a session is open (or being opened)
 Phase phase();
 bool popEvent(Event& e);
 void forget();                      // the chat log was cleared: the next session starts without history
+bool resumeChat(const char* id);    // continue that conversation (web interface); false while one runs
+void newChat();                     // the next conversation starts fresh, in a new file
 void say(const char* text);         // typed in the web interface: sent as the person's turn (session follows)
 void interrupt();                   // touched while it talks: stop the answer
 void requestWeather();

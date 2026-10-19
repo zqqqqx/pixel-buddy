@@ -8,6 +8,7 @@ enum State { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, DOWNLOADING, DONE, FAILED };
 
 void check(bool install);   // in the background; install: when a newer version is found, install it right away
 void install();             // the version found by the last check
+void models();              // once per boot: the wake word models this firmware was built with, if missing
 State state();
 int progress();             // 0..100 while downloading
 const char* latest();       // "1.2.0" once checked

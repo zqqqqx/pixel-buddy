@@ -14,9 +14,11 @@ const char* ssid();   // the configured network
 bool setupActive();
 const char* setupSsid();
 const char* setupPass();
-void forgetWifi();                                // factory reset: the network from the setup is erased
+void forgetWifi(bool setup = false);               // the network from the setup is erased; setup: and the
+                                                  // built-in one is not used either (the setup opens)
 void stopSetup();                                 // close the access point (only while online)
-bool saveWifi(const char* ssid, const char* pass);  // store and connect, false = invalid input
+bool saveWifi(const char* ssid, const char* pass);  // store and connect, false = invalid input; online it is a
+                                                    // trial: back to the old network if the new one fails
 int joinStatus();                                 // 0 idle, 1 connecting, 2 connected, 3 failed
 int scan(char* jsonOut, int cap);                 // nearby networks as a JSON array, strongest first
 

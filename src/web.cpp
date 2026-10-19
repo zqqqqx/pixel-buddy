@@ -16,6 +16,7 @@
 #include "mdns.h"
 #include "cJSON.h"
 #include "sd.h"
+#include "chats.h"
 #include "ha.h"
 #include "live.h"
 #include "mic.h"
@@ -131,32 +132,104 @@ static esp_err_t hWake(httpd_req_t* r) {
   xQueueSend(cmdQ, c, 0);
   return sendJson(r, "{\"ok\":true}");
 }
-static esp_err_t hLog(httpd_req_t* r) {
-  char q[16] = "";
-  if (httpd_req_get_url_query_str(r, q, sizeof(q)) == ESP_OK && strstr(q, "all")) {  // the whole log, to download
-    httpd_resp_set_type(r, "text/plain; charset=utf-8");
-    httpd_resp_set_hdr(r, "Content-Disposition", "attachment; filename=\"pixel-gespraeche.txt\"");
-    static char chunk[4096];
-    for (const char* p : {"/sdcard/pixel/chat.old.log", "/sdcard/pixel/chat.log"}) {
-      FILE* f = fopen(p, "rb");
-      if (!f) continue;
-      size_t n;
-      while ((n = fread(chunk, 1, sizeof(chunk), f)) > 0) httpd_resp_send_chunk(r, chunk, n);
-      fclose(f);
+// ---- conversations (one file each, src/chats.cpp): list, open, search, export, continue, delete
+static void queryVal(httpd_req_t* r, const char* key, char* out, int cap) {  // URL-decoded
+  out[0] = 0;
+  char q[200], v[160];
+  if (httpd_req_get_url_query_str(r, q, sizeof(q)) != ESP_OK || httpd_query_key_value(q, key, v, sizeof(v)) != ESP_OK)
+    return;
+  int n = 0;
+  for (const char* p = v; *p && n < cap - 1; ++p) {
+    if (*p == '%' && p[1] && p[2]) {
+      char h[3] = {p[1], p[2], 0};
+      out[n++] = (char)strtol(h, nullptr, 16);
+      p += 2;
+    } else {
+      out[n++] = *p == '+' ? ' ' : *p;
     }
-    return httpd_resp_send_chunk(r, nullptr, 0);
   }
-  const long cap = 24 * 1024;
+  out[n] = 0;
+}
+static bool bodyId(httpd_req_t* r, char* id) {  // {"id":"..."}
+  char* b = body(r);
+  cJSON* j = b ? cJSON_Parse(b) : nullptr;
+  free(b);
+  const cJSON* v = cJSON_GetObjectItem(j, "id");
+  bool ok = cJSON_IsString(v) && chats::validId(v->valuestring);
+  if (ok) snprintf(id, 16, "%s", v->valuestring);
+  if (j) cJSON_Delete(j);
+  return ok;
+}
+static esp_err_t sendBig(httpd_req_t* r, long cap, int (*fill)(char*, int, const char*), const char* arg) {
   char* t = (char*)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM);
-  sd::readTail("/sdcard/pixel/chat.log", t, cap);
-  httpd_resp_set_type(r, "text/plain; charset=utf-8");
-  esp_err_t e = httpd_resp_send(r, t, HTTPD_RESP_USE_STRLEN);
+  if (!t) return httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "memory");
+  esp_err_t e = fill(t, cap, arg) < 0 ? httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "busy") : sendJson(r, t);
   free(t);
   return e;
 }
-static esp_err_t hLogClear(httpd_req_t* r) {
-  remove("/sdcard/pixel/chat.log");
-  live::forget();  // the robot forgets the conversation too
+static esp_err_t hChats(httpd_req_t* r) {
+  return sendBig(r, 96 * 1024, [](char* t, int cap, const char*) { return chats::listJson(t, cap); }, nullptr);
+}
+static esp_err_t hChatSearch(httpd_req_t* r) {
+  char q[96];
+  queryVal(r, "q", q, sizeof(q));
+  return sendBig(r, 48 * 1024, [](char* t, int cap, const char* q) { return chats::searchJson(q, t, cap); }, q);
+}
+static esp_err_t hChatGet(httpd_req_t* r) {
+  char id[20];
+  queryVal(r, "id", id, sizeof(id));
+  const long cap = 64 * 1024;
+  char* t = (char*)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM);
+  if (!t) return httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "memory");
+  long n = chats::read(id, t, cap);
+  esp_err_t e;
+  if (n < 0) {
+    e = httpd_resp_send_err(r, HTTPD_404_NOT_FOUND, "no such conversation");
+  } else {
+    httpd_resp_set_type(r, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(r, "Cache-Control", "no-store");
+    e = httpd_resp_send(r, t, n);
+  }
+  free(t);
+  return e;
+}
+// all of them in one text file, oldest first
+static esp_err_t hChatExport(httpd_req_t* r) {
+  EXT_RAM_BSS_ATTR static char all[500][16];
+  int n = chats::ids(all, 500);
+  const long cap = 64 * 1024;
+  char* t = (char*)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM);
+  if (!t) return httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "memory");
+  httpd_resp_set_type(r, "text/plain; charset=utf-8");
+  httpd_resp_set_hdr(r, "Content-Disposition", "attachment; filename=\"pixel-gespraeche.txt\"");
+  for (int i = 0; i < n; ++i) {
+    long k = chats::read(all[i], t, cap);
+    if (k <= 0) continue;
+    httpd_resp_sendstr_chunk(r, i ? "\n\n" : "");
+    httpd_resp_send_chunk(r, t, k);
+  }
+  free(t);
+  return httpd_resp_send_chunk(r, nullptr, 0);
+}
+static esp_err_t hChatDelete(httpd_req_t* r) {
+  char id[16], now[16];
+  if (!bodyId(r, id)) return sendJson(r, "{\"ok\":false}");
+  chats::current(now, sizeof(now));
+  if (!strcmp(id, now)) live::newChat();  // Pixel forgets it too
+  return sendJson(r, chats::remove(id) ? "{\"ok\":true}" : "{\"ok\":false}");
+}
+static esp_err_t hChatContinue(httpd_req_t* r) {
+  char id[16];
+  bool ok = bodyId(r, id) && live::resumeChat(id);
+  return sendJson(r, ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"busy\"}");
+}
+static esp_err_t hChatNew(httpd_req_t* r) {
+  live::newChat();
+  return sendJson(r, "{\"ok\":true}");
+}
+static esp_err_t hChatClear(httpd_req_t* r) {
+  chats::clear();
+  live::newChat();
   return sendJson(r, "{\"ok\":true}");
 }
 static esp_err_t hHaTest(httpd_req_t* r) {
@@ -181,10 +254,10 @@ static esp_err_t hKwsRecord(httpd_req_t* r) {
   char q[40] = "", kind[8] = "pos";
   if (httpd_req_get_url_query_str(r, q, sizeof(q)) == ESP_OK) httpd_query_key_value(q, "kind", kind, sizeof(kind));
   bool bg = !strcmp(kind, "bg");
-  if (!sd::ok()) return sendJson(r, "{\"ok\":false,\"error\":\"keine SD-Karte\"}");
-  if (live::active()) return sendJson(r, "{\"ok\":false,\"error\":\"gerade läuft ein Gespräch – kurz warten\"}");
+  if (!sd::ok()) return sendJson(r, "{\"ok\":false,\"error\":\"no_sd\"}");
+  if (live::active()) return sendJson(r, "{\"ok\":false,\"error\":\"busy\"}");
   if (sd::countFiles(KWS_DIR, ".wav") >= mic::KWS_MAX_FILES)
-    return sendJson(r, "{\"ok\":false,\"error\":\"800 Aufnahmen – erst am PC sichern und automatische löschen\"}");
+    return sendJson(r, "{\"ok\":false,\"error\":\"full\"}");
   const int n = bg ? 16000 * 10 : 16000 * 5 / 2;  // "Pixel": 0.5 s before the click + 2 s, background: 10 s
   int16_t* pcm = (int16_t*)heap_caps_malloc(n * 2, MALLOC_CAP_SPIRAM);
   mic::setWake(false);  // saying "Pixel" must not start a conversation that talks into the next recording
@@ -310,6 +383,13 @@ static esp_err_t hSetup(httpd_req_t* r) {
   httpd_resp_set_hdr(r, "Cache-Control", "no-store");
   return httpd_resp_send(r, (const char*)SETUP_UI_GZ, SETUP_UI_GZ_LEN);
 }
+// the brand font (Quicksand, SIL OFL): cached by the browser for a year
+static esp_err_t hFont(httpd_req_t* r) {
+  bool bold = strstr(r->uri, "700");
+  httpd_resp_set_type(r, "font/woff2");
+  httpd_resp_set_hdr(r, "Cache-Control", "public, max-age=31536000, immutable");
+  return httpd_resp_send(r, (const char*)(bold ? FONT_700_GZ : FONT_500_GZ), bold ? FONT_700_GZ_LEN : FONT_500_GZ_LEN);
+}
 static esp_err_t hWifiScan(httpd_req_t* r) {
   char* out = (char*)heap_caps_malloc(3072, MALLOC_CAP_SPIRAM);
   net::scan(out, 3072);
@@ -325,16 +405,21 @@ static esp_err_t hWifiSave(httpd_req_t* r) {
   const cJSON* pw = cJSON_GetObjectItem(j, "pass");
   const cJSON* key = cJSON_GetObjectItem(j, "api_key");
   bool ok = cJSON_IsString(ss) && net::saveWifi(ss->valuestring, cJSON_IsString(pw) ? pw->valuestring : "");
-  if (ok && cJSON_IsString(key) && key->valuestring[0]) {
+  if (ok) {  // the key, the language and the name chosen in the setup
     cJSON* c = cJSON_CreateObject();
-    cJSON_AddStringToObject(cJSON_AddObjectToObject(c, "conversation"), "api_key", key->valuestring);
+    cJSON* cv = cJSON_AddObjectToObject(c, "conversation");
+    if (cJSON_IsString(key) && key->valuestring[0]) cJSON_AddStringToObject(cv, "api_key", key->valuestring);
+    for (const char* k : {"lang", "wake"}) {
+      const cJSON* v = cJSON_GetObjectItem(j, k);
+      if (cJSON_IsString(v)) cJSON_AddStringToObject(cv, k, v->valuestring);
+    }
     char* t = cJSON_PrintUnformatted(c);
     cJSON_Delete(c);
     settings::apply(t);
     cJSON_free(t);
   }
   if (j) cJSON_Delete(j);
-  return sendJson(r, ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"Netzname fehlt oder enthält \\\"/\\\\, oder Passwort zu kurz (mind. 8 Zeichen)\"}");
+  return sendJson(r, ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"wifi_invalid\"}");
 }
 // hotspot mode network (switched on in the BOOT 5x menu); the password never goes back to the page
 static esp_err_t hHotspot(httpd_req_t* r) {
@@ -345,7 +430,15 @@ static esp_err_t hHotspot(httpd_req_t* r) {
   const cJSON* pw = cJSON_GetObjectItem(j, "pass");
   bool ok = cJSON_IsString(ss) && net::saveHotspot(ss->valuestring, cJSON_IsString(pw) ? pw->valuestring : "");
   if (j) cJSON_Delete(j);
-  return sendJson(r, ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"Netzname enthält \\\"/\\\\, oder Passwort zu kurz (mind. 8 Zeichen)\"}");
+  return sendJson(r, ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"wifi_invalid\"}");
+}
+// forget the WiFi: after the restart Pixel opens its setup network (QR code on the display)
+static esp_err_t hWifiForget(httpd_req_t* r) {
+  net::forgetWifi(true);
+  sendJson(r, "{\"ok\":true}");
+  vTaskDelay(pdMS_TO_TICKS(600));
+  esp_restart();
+  return ESP_OK;
 }
 static esp_err_t hWifiStatus(httpd_req_t* r) {
   char j[200];
@@ -404,7 +497,7 @@ static esp_err_t hOta(httpd_req_t* r) {
   if (part && r->content_len >= 100000) backupNow();  // the settings as they were, in case the new one loses them
   esp_ota_handle_t h;
   if (!part || r->content_len < 100000 || esp_ota_begin(part, r->content_len, &h) != ESP_OK)
-    return sendJson(r, "{\"ok\":false,\"error\":\"Update nicht moeglich\"}");
+    return sendJson(r, "{\"ok\":false,\"error\":\"update_failed\"}");
   EXT_RAM_BSS_ATTR static char buf[4096];  // flash writes from PSRAM go through a bounce buffer
   int left = r->content_len;
   bool ok = true;
@@ -417,7 +510,7 @@ static esp_err_t hOta(httpd_req_t* r) {
   ok = ok && esp_ota_end(h) == ESP_OK;  // checks the image
   if (!ok) {
     if (left > 0) esp_ota_abort(h);
-    return sendJson(r, "{\"ok\":false,\"error\":\"Datei ungueltig oder Uebertragung abgebrochen\"}");
+    return sendJson(r, "{\"ok\":false,\"error\":\"bad_file\"}");
   }
   esp_ota_set_boot_partition(part);
   sendJson(r, "{\"ok\":true}");
@@ -484,7 +577,7 @@ void start() {
   stMtx = xSemaphoreCreateMutex();
   httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
   cfg.stack_size = 7168;
-  cfg.max_uri_handlers = 40;
+  cfg.max_uri_handlers = 48;
   cfg.lru_purge_enable = true;
   cfg.max_open_sockets = 5;  // leave sockets for the conversation (WebSocket, helper HTTPS)
   cfg.core_id = 0;
@@ -501,8 +594,14 @@ void start() {
       {"/api/status", HTTP_GET, hStatus, nullptr},
       {"/api/play", HTTP_POST, guarded, (void*)hPlay},
       {"/api/wake", HTTP_POST, guarded, (void*)hWake},
-      {"/api/log", HTTP_GET, hLog, nullptr},
-      {"/api/log/clear", HTTP_POST, guarded, (void*)hLogClear},
+      {"/api/chats", HTTP_GET, hChats, nullptr},
+      {"/api/chats/get", HTTP_GET, hChatGet, nullptr},
+      {"/api/chats/search", HTTP_GET, hChatSearch, nullptr},
+      {"/api/chats/export", HTTP_GET, hChatExport, nullptr},
+      {"/api/chats/delete", HTTP_POST, guarded, (void*)hChatDelete},
+      {"/api/chats/continue", HTTP_POST, guarded, (void*)hChatContinue},
+      {"/api/chats/new", HTTP_POST, guarded, (void*)hChatNew},
+      {"/api/chats/clear", HTTP_POST, guarded, (void*)hChatClear},
       {"/api/restart", HTTP_POST, guarded, (void*)hRestart},
       {"/api/ha/test", HTTP_GET, hHaTest, nullptr},
       {"/api/kws/record", HTTP_POST, guarded, (void*)hKwsRecord},
@@ -518,9 +617,12 @@ void start() {
       {"/api/backup", HTTP_POST, guarded, (void*)hBackupSave},
       {"/api/backup/restore", HTTP_POST, guarded, (void*)hBackupRestore},
       {"/setup", HTTP_GET, hSetup, nullptr},
+      {"/fonts/q500.woff2", HTTP_GET, hFont, nullptr},
+      {"/fonts/q700.woff2", HTTP_GET, hFont, nullptr},
       {"/api/wifi/scan", HTTP_GET, hWifiScan, nullptr},
       {"/api/wifi", HTTP_POST, guarded, (void*)hWifiSave},
       {"/api/wifi/status", HTTP_GET, hWifiStatus, nullptr},
+      {"/api/wifi/forget", HTTP_POST, guarded, (void*)hWifiForget},
       {"/api/hotspot", HTTP_POST, guarded, (void*)hHotspot},
       {"/api/ota", HTTP_POST, guarded, (void*)hOta},
       {"/api/chat", HTTP_POST, guarded, (void*)hChat},

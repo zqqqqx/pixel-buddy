@@ -6,9 +6,11 @@
 #include <string.h>
 
 #include "assist.h"
+#include "chats.h"
 #include "guard.h"
 #include "net.h"
 #include "sched.h"
+#include "settings.h"
 #include "beat.h"
 #include "update.h"
 #include <math.h>
@@ -31,9 +33,42 @@ int main() {
   assert(askedFor("forget_all", "vergiss alles über mich"));
   assert(askedFor("privacy", "hör bitte nicht mehr zu"));
   assert(!askedFor("privacy", "ruhe jetzt"));
-  assert(askedFor("persona", "nimm die eule und rede auch so"));
-  assert(!askedFor("persona", "wechsle auf den fertigen charakter eule."));
+  assert(askedFor("shutdown", "switch off."));
+  assert(askedFor("shutdown", "please shut down now"));
+  assert(!askedFor("shutdown", "switch off the light"));
+  assert(askedFor("restart", "reboot yourself"));
+  assert(!askedFor("clear_history", "forget it"));
+  assert(askedFor("clear_history", "delete the chat history"));
   assert(askedFor("status", "egal"));  // not sensitive
+
+  // the old self description goes, the owner's own lines stay (also between the old ones)
+  char kn[400] = "Wissen ueber dich selbst (nur erwaehnen, wenn danach gefragt wird):\n- Hardware: ESP32\n"
+                 "- Ich wohne in Schwerin.\n- Beruehrung: Stups\n- Mein Bruder nutzt Gemini.";
+  settings::stripOldKnowledge(kn);
+  assert(!strcmp(kn, "- Ich wohne in Schwerin.\n- Mein Bruder nutzt Gemini."));
+  char own[] = "Mein Bruder nutzt Gemini.\n- Hardware: mein Laptop";  // no old head: untouched
+  settings::stripOldKnowledge(own);
+  assert(!strcmp(own, "Mein Bruder nutzt Gemini.\n- Hardware: mein Laptop"));
+
+  // conversations: file id from the first line, title, search in lower case
+  char cid[16];
+  assert(chats::idFromLine("2026-10-19 20:15:30  Du: Hallo", cid) && !strcmp(cid, "20261019-201530"));
+  assert(!chats::idFromLine("--- neues Gespraech ---", cid));
+  assert(chats::validId("20261019-201530") && !chats::validId("../x") && !chats::validId("20261019201530x"));
+  char ttl[16];
+  chats::titleOf("2026-10-19 20:15:30  Pixel: Hey.\n2026-10-19 20:15:35  Du: Wie wird das Wetter?\n", ttl, sizeof(ttl));
+  assert(!strcmp(ttl, "Wie wird das We"));
+  chats::titleOf("2026-10-19 20:15:30  Pixel: Hi.\n2026-10-19 20:15:35  You: Hello there\n", ttl, sizeof(ttl));
+  assert(!strcmp(ttl, "Hello there"));
+  chats::titleOf("2026-10-19 20:15:30  Du: Grüße\n", ttl, 4);  // not inside the two bytes of the ü
+  assert(!strcmp(ttl, "Gr"));
+  char low[] = "Größe ÄÖÜ";
+  chats::lower(low);
+  assert(!strcmp(low, "größe äöü"));
+  // the list: an old chat continued today comes before a newer one left alone
+  chats::Recent rc[] = {{100, "20261019-090000"}, {300, "20261001-120000"}, {100, "20261019-100000"}};
+  qsort(rc, 3, sizeof(rc[0]), chats::byRecent);
+  assert(!strcmp(rc[0].id, "20261001-120000") && !strcmp(rc[1].id, "20261019-100000"));
 
   // brightness / volume schedule: the latest entry so far, before the first one of the day yesterday's last
   const int at[] = {19 * 60, 7 * 60, 22 * 60};  // in any order

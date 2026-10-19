@@ -11,6 +11,6 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then echo "commit fi
 git push -q origin HEAD
 tools/dist.sh
 if [ -n "$1" ]; then NOTES="--notes-file $1"; else NOTES="--generate-notes"; fi
-gh release create "v$V" dist/pixel.bin dist/pixel-update.bin --repo "$REPO" --target "$(git rev-parse HEAD)" \
+gh release create "v$V" dist/pixel.bin dist/pixel-update.bin dist/pixel-models.bin --repo "$REPO" --target "$(git rev-parse HEAD)" \
   --title "Pixel Buddy $V" $NOTES
 echo "released v$V - robots with an older version install it at their update time"

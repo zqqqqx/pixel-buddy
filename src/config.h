@@ -45,14 +45,11 @@
 // 0 = it starts for any detected voice.
 #define CFG_WAKEWORD_ENABLE 1
 
-// Wake word model (offline, Espressif WakeNet). Packed and flashed automatically
-// by `pio run -t upload`. Some choices:
-//   "wn10_de_halloesp"  Hallo ESP        "wn10_heynova"     Hey Nova
-//   "wn10_en_heybuddy"  Hey Buddy        "wn10_hiesp"       Hi ESP
-//   "wn10_alexa"        Alexa            "wn9_jarvis_tts"   Jarvis
-//   "wn9_computer_tts"  Computer         "wn9_heywillow_tts" Hey Willow
+// Wake words besides the own "Pixel" (offline, Espressif WakeNet): packed into the "model" partition (2 MB,
+// these take 1.9 MB) and flashed by `pio run -t upload` (an update over WiFi does not change them). Which one
+// listens - and so Pixel's name - is chosen in the setup / web interface (settings::WAKES).
 // (full list: managed_components/espressif__esp-sr/model/wakenet_model)
-#define CFG_WAKEWORD_MODEL "wn10_de_halloesp"
+#define CFG_WAKEWORD_MODELS "wn10_en_heybuddy wn9_jarvis_tts wn9_computer_tts wn9_sophia_tts wn9_heywillow_tts wn10_de_halloesp"
 
 // Wake word sensitivity: 0 = normal, 1 = more sensitive (more false triggers)
 #define CFG_WAKEWORD_AGGRESSIVE 0

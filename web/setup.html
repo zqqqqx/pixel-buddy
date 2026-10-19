@@ -1,76 +1,206 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pixel Buddy einrichten</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<title>Pixel Buddy setup</title>
 <style>
-:root{--bg:#0d0f14;--panel:#161922;--line:#262b38;--text:#e9ecf3;--muted:#8a93a8;--acc:#5b8cff;--ok:#3ecf8e;--bad:#ff5d6c}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:20px 16px 40px}
-main{max-width:440px;margin:0 auto}
-.logo{display:block;margin:8px 0 14px}
-.brand{font-size:13px;color:var(--muted);margin:-2px 0 2px}.brand b{color:#5b8cff}
-h1{font-size:22px;margin:0 0 4px}p{color:var(--muted);margin:0 0 18px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
-label{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}
-input,select{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0f1218;color:var(--text);font:inherit}
-.nets{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow:auto}
-.net{display:flex;justify-content:space-between;align-items:center;padding:11px 12px;border-radius:10px;background:#0f1218;border:1px solid var(--line);cursor:pointer}
-.net.on{border-color:var(--acc)}.net small{color:var(--muted)}
-button{width:100%;padding:13px;border:0;border-radius:10px;background:var(--acc);color:#fff;font:600 16px system-ui;margin-top:16px;cursor:pointer}
-button.ghost{background:transparent;border:1px solid var(--line);color:var(--text);margin-top:8px}
-.msg{margin-top:14px;padding:12px;border-radius:10px;display:none}.msg.on{display:block}
-.msg.ok{background:rgba(62,207,142,.12);color:var(--ok)}.msg.bad{background:rgba(255,93,108,.12);color:var(--bad)}.msg.wait{background:#0f1218;color:var(--muted)}
-a{color:var(--acc)}
+/* the same look as the web interface (web/index.html, docs/brand.md) */
+@font-face{font-family:Quicksand;font-weight:500;font-display:swap;src:url(/fonts/q500.woff2) format("woff2")}
+@font-face{font-family:Quicksand;font-weight:700;font-display:swap;src:url(/fonts/q700.woff2) format("woff2")}
+:root{--bg:#0b0d12;--card:#151922;--card2:#1c2130;--fill:#262c3a;--line:rgba(255,255,255,.06);--text:#f6f3ea;--muted:#8b94a9;--faint:#596174;
+  --tint:#5b8cff;--lilac:#a87bff;--mint:#38d39f;--red:#ff5d6c;color-scheme:dark}
+@media(prefers-color-scheme:light){:root{--bg:#f6f3ea;--card:#fffdf8;--card2:#f4f0e6;--fill:#e7e2d6;--line:rgba(17,20,28,.08);--text:#11141c;--muted:#6d6a62;
+  --faint:#aaa597;--tint:#3d6bff;color-scheme:light}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);height:100%}
+body{font:500 16px/1.45 Quicksand,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}b,h1{font-weight:700}
+svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+main{max-width:440px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;padding:calc(18px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom))}
+.step{display:none;flex:1;flex-direction:column}.step.on{display:flex;animation:in .35s ease}
+@keyframes in{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+.top{display:flex;justify-content:space-between;align-items:center;min-height:38px}
+.link{border:0;background:none;color:var(--tint);font-size:16px;font-weight:700;cursor:pointer;padding:6px 0;display:inline-flex;align-items:center;gap:2px}
+h1{font-size:30px;line-height:1.15;letter-spacing:-.02em;margin:14px 0 8px}
+p.sub{color:var(--muted);margin:0 0 22px}
+.grow{flex:1}
+.btn{width:100%;border:0;border-radius:99px;padding:16px;background:var(--tint);color:#fff;font-weight:700;font-size:17px;cursor:pointer}
+.btn:active{transform:scale(.98)}.btn.ghost{background:none;color:var(--tint);margin-top:6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 18px;position:relative;width:100%;border:0;background:none;text-align:left;font-size:16px;cursor:pointer}
+.row+.row::before{content:"";position:absolute;top:0;left:18px;right:18px;border-top:1px solid var(--line)}
+.row .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.row .t small{display:block;color:var(--muted);font-size:13.5px}
+.row:active{background:var(--card2)}.row .v{color:var(--muted);display:flex;gap:7px;align-items:center}
+.row .ck{width:24px;height:24px;border-radius:50%;border:2px solid var(--fill);display:grid;place-items:center;color:#fff;flex:none}
+.row.on .ck{background:var(--tint);border-color:var(--tint)}.row .ck svg.i{width:14px;height:14px;stroke-width:3;opacity:0}.row.on .ck svg.i{opacity:1}
+.field{display:block;width:100%;border:0;outline:none;background:none;padding:16px 18px;font-size:17px}
+.field+.field{border-top:1px solid var(--line)}
+.sig{display:inline-flex;align-items:flex-end;gap:2px;height:14px}.sig i{width:3px;border-radius:2px;background:var(--faint)}
+.sig i:nth-child(1){height:5px}.sig i:nth-child(2){height:9px}.sig i:nth-child(3){height:14px}
+.sig.s1 i:nth-child(1),.sig.s2 i:nth-child(-n+2),.sig.s3 i{background:var(--text)}
+.err{color:var(--red);font-size:14.5px;margin:12px 6px 0;min-height:20px;font-weight:700}
+.hero{display:grid;place-items:center;margin:30px 0 8px}
+.hero svg{width:168px;height:168px}
+.hero .e{transform-box:fill-box;transform-origin:center;animation:blink 4.5s infinite}
+.hero .look{animation:look 6s ease-in-out infinite}
+@keyframes blink{0%,44%,48%,100%{transform:scaleY(1)}46%{transform:scaleY(.1)}}
+@keyframes look{0%,30%{transform:translate(0,0)}35%,60%{transform:translate(-5px,2px)}65%,90%{transform:translate(4px,-2px)}}
+.wm{font-size:22px;text-align:center;margin-top:4px}.wm b{color:var(--tint)}.wm span{color:var(--lilac)}
+.slides{text-align:center}.slide{display:none}.slide.on{display:block;animation:in .35s ease}
+.dots{display:flex;justify-content:center;gap:8px;margin:24px 0}
+.dots i{width:8px;height:8px;border-radius:50%;background:var(--fill)}.dots i.on{background:var(--tint)}
+.spin{width:46px;height:46px;border-radius:50%;border:4px solid var(--fill);border-top-color:var(--tint);animation:rot .9s linear infinite;margin:40px auto 10px}
+@keyframes rot{to{transform:rotate(360deg)}}
+.done{width:80px;height:80px;border-radius:50%;background:var(--mint);color:#fff;display:grid;place-items:center;margin:40px auto 6px;animation:pop .4s cubic-bezier(.3,1.5,.6,1)}
+@keyframes pop{from{transform:scale(.5);opacity:0}}.done svg.i{width:40px;height:40px;stroke-width:3}
+.center{text-align:center}
+.addr{display:block;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;font-size:20px;font-weight:700;color:var(--tint);text-decoration:none;margin-top:6px}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9.5" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+  <symbol id="eyes" viewBox="0 0 128 128"><rect width="128" height="128" rx="30" fill="#11141C"/><g class="look"><g transform="translate(40 66)"><g class="e"><rect x="-17" y="-23" width="34" height="46" rx="17" fill="#F6F3EA"/><ellipse cx="4" cy="-4" rx="10" ry="14" fill="#3D6BFF"/><circle cx="0" cy="-11" r="4.2" fill="#fff"/></g></g><g transform="translate(88 64) scale(1.07)"><g class="e"><rect x="-17" y="-23" width="34" height="46" rx="17" fill="#F6F3EA"/><ellipse cx="4" cy="-4" rx="10" ry="14" fill="#3D6BFF"/><circle cx="0" cy="-11" r="4.2" fill="#fff"/></g></g></g></symbol>
+</svg>
 <main>
-  <svg class="logo" width="52" height="52" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#11141C"/><g transform="translate(40 66) scale(1)"><rect x="-17" y="-23" width="34" height="46" rx="17" fill="#F6F3EA"/><ellipse cx="4" cy="-4" rx="10" ry="14" fill="#3D6BFF"/><circle cx="0" cy="-11" r="4.2" fill="#fff"/></g><g transform="translate(88 64) scale(1.07)"><rect x="-17" y="-23" width="34" height="46" rx="17" fill="#F6F3EA"/><ellipse cx="4" cy="-4" rx="10" ry="14" fill="#3D6BFF"/><circle cx="0" cy="-11" r="4.2" fill="#fff"/></g></svg>
-  <div class="brand"><b>pixel</b> buddy · Der kleine Freund mit großen Augen.</div>
-  <h1>Pixel einrichten</h1>
-  <p>Wähle dein WLAN – Pixel verbindet sich damit und ist danach unter <b>pixel.local</b> erreichbar.</p>
-  <div class="card">
-    <label>WLAN in der Nähe</label>
-    <div class="nets" id="nets"><small style="color:var(--muted)">Suche …</small></div>
-    <button class="ghost" type="button" onclick="scan()">Neu suchen</button>
-    <label for="ssid">Netzwerkname</label>
-    <input id="ssid" autocomplete="off" autocapitalize="off">
-    <label for="pass">Passwort</label>
-    <input id="pass" type="password" autocomplete="off">
-    <div id="keyBox">
-      <label for="key">OpenAI API-Key <span id="keyHint"></span></label>
-      <input id="key" type="password" placeholder="sk-…" autocomplete="off" autocapitalize="off">
+  <!-- 1 language -->
+  <section class="step on" id="s-lang">
+    <div class="hero" style="margin-top:20px"><svg viewBox="0 0 128 128"><use href="#eyes"/></svg></div>
+    <div class="wm"><b>pixel</b> <span>buddy</span></div>
+    <h1 class="center" style="font-size:24px;margin-top:22px">Language · Sprache</h1>
+    <div class="card" id="langs" style="margin-top:8px"></div>
+  </section>
+
+  <!-- 2 intro -->
+  <section class="step" id="s-intro">
+    <div class="top"><button class="link" onclick="go('lang')"><svg class="i"><use href="#i-back"/></svg></button><button class="link" onclick="go('name')">Skip</button></div>
+    <div class="hero"><svg viewBox="0 0 128 128"><use href="#eyes"/></svg></div>
+    <div class="slides">
+      <div class="slide on"><h1>Hi, I'm Pixel.</h1><p class="sub">A little buddy with big eyes.</p></div>
+      <div class="slide"><h1>Call my name.</h1><p class="sub">Then I'm listening.</p></div>
+      <div class="slide"><h1>A tap is a boop.</h1><p class="sub">Holding is petting.</p></div>
     </div>
-    <button id="save" onclick="save()">Verbinden</button>
-    <div class="msg" id="msg"></div>
-  </div>
+    <div class="dots"><i class="on"></i><i></i><i></i></div>
+    <div class="grow"></div>
+    <button class="btn" id="nextSlide" onclick="slide(1)">Next</button>
+  </section>
+
+  <!-- 3 name -->
+  <section class="step" id="s-name">
+    <div class="top"><button class="link" onclick="go('intro')"><svg class="i"><use href="#i-back"/></svg>Back</button><span></span></div>
+    <h1>What's my name?</h1>
+    <p class="sub">That's how you call me.</p>
+    <div class="card" id="names"></div>
+    <div class="grow" style="min-height:20px"></div>
+    <button class="btn" onclick="go('wifi')">Next</button>
+  </section>
+
+  <!-- 4 networks -->
+  <section class="step" id="s-wifi">
+    <div class="top"><button class="link" onclick="go('name')"><svg class="i"><use href="#i-back"/></svg>Back</button><button class="link" onclick="scan()">Search</button></div>
+    <h1>Choose WiFi</h1>
+    <p class="sub">Afterwards Pixel is at pixel.local.</p>
+    <div class="card" id="nets"><div class="row"><span class="t" style="color:var(--muted)">Searching …</span></div></div>
+    <div class="card" style="margin-top:10px"><button class="row" onclick="pick('',false)"><span class="t">Other network</span><svg class="i" style="width:15px;color:var(--faint)"><use href="#i-chev"/></svg></button></div>
+  </section>
+
+  <!-- 5 password -->
+  <section class="step" id="s-pass">
+    <div class="top"><button class="link" onclick="go('wifi')"><svg class="i"><use href="#i-back"/></svg>WiFi</button><span></span></div>
+    <h1 id="passTitle">Password</h1>
+    <p class="sub" id="passSub"></p>
+    <div class="card">
+      <input class="field" id="ssid" placeholder="Network name" autocomplete="off" autocapitalize="off" style="display:none">
+      <input class="field" id="pass" type="password" placeholder="Password" autocomplete="off" onkeydown="if(event.key==='Enter')afterPass()">
+    </div>
+    <div class="err" id="passErr"></div>
+    <div class="grow"></div>
+    <button class="btn" onclick="afterPass()">Next</button>
+  </section>
+
+  <!-- 6 OpenAI key -->
+  <section class="step" id="s-key">
+    <div class="top"><button class="link" onclick="go('pass')"><svg class="i"><use href="#i-back"/></svg>Back</button><span></span></div>
+    <h1>OpenAI key</h1>
+    <p class="sub">So that Pixel can talk.</p>
+    <div class="card"><input class="field" id="key" type="password" placeholder="sk-…" autocomplete="off" autocapitalize="off"></div>
+    <div class="grow"></div>
+    <button class="btn" onclick="connect()">Connect</button>
+    <button class="btn ghost" onclick="$('#key').value='';connect()">Later</button>
+  </section>
+
+  <!-- 7 connecting / done -->
+  <section class="step" id="s-wait">
+    <div class="spin"></div>
+    <h1 class="center">Connecting …</h1>
+    <p class="sub center" id="waitSub"></p>
+  </section>
+  <section class="step" id="s-done">
+    <div class="done"><svg class="i"><use href="#i-check"/></svg></div>
+    <h1 class="center">Done.</h1>
+    <p class="sub center">Connect your device to your WiFi again and open:</p>
+    <a class="addr" href="http://pixel.local/">pixel.local</a>
+    <p class="sub center" style="margin-top:12px" id="doneIp"></p>
+  </section>
 </main>
 <script>
-const $=s=>document.querySelector(s);
-function msg(t,c){const m=$('#msg');m.className='msg on '+c;m.innerHTML=t}
-function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function scan(){$('#nets').innerHTML='<small style="color:var(--muted)">Suche …</small>';
-  fetch('/api/wifi/scan').then(r=>r.json()).then(l=>{const n=$('#nets');n.innerHTML='';
-    if(!l.length){n.innerHTML='<small style="color:var(--muted)">Nichts gefunden – Name unten eintippen.</small>';return}
-    l.forEach(w=>{const d=document.createElement('div');d.className='net';
-      d.innerHTML=`<span>${esc(w.ssid)}</span><small>${w.open?'offen · ':''}${w.rssi>-60?'stark':w.rssi>-72?'gut':'schwach'}</small>`;
-      d.onclick=()=>{document.querySelectorAll('.net').forEach(e=>e.classList.remove('on'));d.classList.add('on');$('#ssid').value=w.ssid;$('#pass').focus()};
-      n.appendChild(d)})}).catch(()=>{$('#nets').innerHTML='<small>Suche fehlgeschlagen</small>'})}
-function save(){const b={ssid:$('#ssid').value.trim(),pass:$('#pass').value,api_key:$('#key').value.trim()};
-  if(!b.ssid){msg('Bitte ein WLAN wählen.','bad');return}
-  $('#save').disabled=true;msg('Verbinde mit „'+esc(b.ssid)+'“ …','wait');
+// languages: the page is English; other languages translate it (keys = the English text), like web/index.html
+const I18N={de:{'Skip':'Überspringen',"Hi, I'm Pixel.":'Hallo, ich bin Pixel.','A little buddy with big eyes.':'Der kleine Freund mit großen Augen.',
+'Call my name.':'Ruf meinen Namen.',"Then I'm listening.":'Dann höre ich zu.','A tap is a boop.':'Tippen ist ein Stups.','Holding is petting.':'Halten ist Streicheln.',
+'Next':'Weiter','Back':'Zurück',"What's my name?":'Wie heiße ich?',"That's how you call me.":'So rufst du mich.','Choose WiFi':'WLAN wählen',
+'Afterwards Pixel is at pixel.local.':'Danach ist Pixel unter pixel.local erreichbar.','Search':'Suchen','Searching …':'Suche …','Other network':'Anderes Netz',
+'WiFi':'WLAN','Password':'Passwort','Network name':'Netzname','OpenAI key':'OpenAI-Schlüssel','So that Pixel can talk.':'Damit Pixel sprechen kann.',
+'Connect':'Verbinden','Later':'Später','Connecting …':'Verbinde …','Done.':'Fertig.','Connect your device to your WiFi again and open:':'Verbinde dein Gerät wieder mit deinem WLAN und öffne:',
+"Let's go":'Los geht’s','Open network':'Offenes Netz','Enter the password':'Passwort eingeben','Network name missing':'Netzname fehlt','At least 8 characters':'Mindestens 8 Zeichen',
+"Pixel can't get into this network. Check the password.":'Pixel kommt nicht in dieses Netz. Passwort prüfen.','No answer. Try again.':'Keine Antwort. Nochmal versuchen.',
+'No network found':'Kein Netz gefunden','Search failed':'Suche fehlgeschlagen','That did not work.':'Das hat nicht geklappt.','Say “{p}”':'Sag „{p}“'}};
+let LANG='en';
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const t=(s,v)=>{let r=(I18N[LANG]||{})[s]??s;if(v)for(const k in v)r=r.replaceAll('{'+k+'}',v[k]);return r};
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ORIG=new Map();
+function translate(){document.documentElement.lang=LANG;const D=I18N[LANG]||{};
+  const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;
+  while(n=w.nextNode()){if(!ORIG.has(n))ORIG.set(n,n.nodeValue);const o=ORIG.get(n),s=o.trim();n.nodeValue=s&&D[s]?o.replace(s,D[s]):o}
+  $$('[placeholder]').forEach(e=>{e.dataset.ph??=e.placeholder;e.placeholder=D[e.dataset.ph]||e.dataset.ph})}
+let st={},M={},sel='',cur=0,lang='en',wake='pixel';
+function go(s){$$('.step').forEach(e=>e.classList.toggle('on',e.id==='s-'+s));if(s==='wifi'&&!$('#nets [data-ssid]'))scan();if(s==='pass')setTimeout(()=>(sel?$('#pass'):$('#ssid')).focus(),300)}
+function slide(d){cur+=d;if(cur>2){go('name');return}$$('.slide').forEach((e,i)=>e.classList.toggle('on',i===cur));$$('.dots i').forEach((e,i)=>e.classList.toggle('on',i===cur));
+  $('#nextSlide').textContent=t(cur===2?"Let's go":'Next')}
+const check='<span class="ck"><svg class="i"><use href="#i-check"/></svg></span>';
+function drawLangs(){$('#langs').innerHTML=(M.langs||[{code:'en',name:'English'},{code:'de',name:'Deutsch'}]).map(l=>`<button class="row" data-code="${l.code}"><span class="t">${esc(l.name)}</span><svg class="i" style="width:15px;color:var(--faint)"><use href="#i-chev"/></svg></button>`).join('');
+  $$('#langs .row').forEach(b=>b.onclick=()=>{lang=b.dataset.code;LANG=I18N[lang]?lang:'en';translate();drawNames();cur=0;slide(0);go('intro')})}
+function drawNames(){$('#names').innerHTML=(M.wakes||[{id:'pixel',name:'Pixel',phrase:'Pixel'}]).map(w=>`<button class="row${w.id===wake?' on':''}" data-id="${w.id}"><span class="t">${esc(w.name)}<small>${esc(t('Say “{p}”',{p:w.phrase}))}</small></span>${check}</button>`).join('');
+  $$('#names .row').forEach(b=>b.onclick=()=>{wake=b.dataset.id;drawNames()})}
+function bars(r){return`<span class="sig ${r>-60?'s3':r>-72?'s2':'s1'}"><i></i><i></i><i></i></span>`}
+function scan(){$('#nets').innerHTML=`<div class="row"><span class="t" style="color:var(--muted)">${t('Searching …')}</span></div>`;
+  fetch('/api/wifi/scan').then(r=>r.json()).then(l=>{
+    $('#nets').innerHTML=l.slice(0,12).map(w=>`<button class="row" data-ssid="${esc(w.ssid)}" data-open="${w.open?1:0}"><span class="t">${esc(w.ssid)}</span><span class="v">${w.open?'':'<svg class="i" style="width:16px"><use href="#i-lock"/></svg>'}${bars(w.rssi)}</span></button>`).join('')||
+      `<div class="row"><span class="t" style="color:var(--muted)">${t('No network found')}</span></div>`;
+    $$('#nets [data-ssid]').forEach(b=>b.onclick=()=>pick(b.dataset.ssid,b.dataset.open==='1'))}).catch(()=>{$('#nets').innerHTML=`<div class="row"><span class="t" style="color:var(--muted)">${t('Search failed')}</span></div>`})}
+function pick(ssid,isOpen){sel=ssid;$('#ssid').style.display=ssid?'none':'';$('#ssid').value=ssid;$('#pass').value='';$('#passErr').textContent='';
+  $('#passTitle').textContent=ssid||t('Other network');$('#passSub').textContent=ssid?t(isOpen?'Open network':'Enter the password'):'';
+  $('#pass').style.display=isOpen?'none':'';if(isOpen&&ssid){afterPass();return}go('pass')}
+function afterPass(){const ssid=$('#ssid').value.trim(),p=$('#pass').value;
+  if(!ssid){$('#passErr').textContent=t('Network name missing');return}
+  if(p&&p.length<8){$('#passErr').textContent=t('At least 8 characters');return}
+  sel=ssid;st.key?connect():go('key')}
+function connect(){const b={ssid:sel,pass:$('#pass').value,api_key:$('#key').value.trim(),lang,wake};go('wait');$('#waitSub').textContent=sel;
   fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()).then(j=>{
-    if(!j.ok){msg(j.error||'Das hat nicht geklappt.','bad');$('#save').disabled=false;return}poll(0)}).catch(()=>poll(0))}
+    if(!j.ok){fail(t('That did not work.'));return}poll(0)}).catch(()=>poll(0))}
+function fail(s){go('pass');$('#passErr').textContent=s}
 function poll(n){setTimeout(()=>fetch('/api/wifi/status').then(r=>r.json()).then(s=>{
-    if(s.state==2){msg(`Verbunden! Verbinde dein Handy wieder mit deinem WLAN und öffne <a href="http://${s.ip}/">http://${s.ip}</a> oder <a href="http://pixel.local/">pixel.local</a>.${s.key?'':'<br>Noch fehlt der OpenAI-Key – den kannst du dort unter „Gespräch“ eintragen.'}`,'ok');return}
-    if(s.state==3){msg('Pixel kommt nicht in dieses WLAN. Passwort prüfen und nochmal versuchen.','bad');$('#save').disabled=false;return}
-    if(n<40)poll(n+1);else{msg('Keine Antwort – nochmal versuchen.','bad');$('#save').disabled=false}
-  }).catch(()=>{if(n<40)poll(n+1)}),1000)}
-fetch('/api/wifi/status').then(r=>r.json()).then(s=>{if(s.key){$('#keyHint').textContent='(schon hinterlegt – nur zum Ändern)'}else{$('#keyHint').textContent='(nötig zum Sprechen)'}
-  if(s.ssid)$('#ssid').value=s.ssid});
-scan();
+    if(s.state==2){$('#doneIp').textContent=s.ip;go('done');return}
+    if(s.state==3){fail(t("Pixel can't get into this network. Check the password."));return}
+    n<40?poll(n+1):fail(t('No answer. Try again.'))}).catch(()=>{if(n<40)poll(n+1)}),1000)}
+fetch('/api/wifi/status').then(r=>r.json()).then(s=>{st=s}).catch(()=>{});
+fetch('/api/config').then(r=>r.json()).then(j=>{M=j.meta||{};wake=j.conversation?.wake||'pixel';drawLangs();drawNames()}).catch(drawLangs);
+drawLangs();
 </script>
 </body>
 </html>

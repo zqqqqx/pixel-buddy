@@ -48,6 +48,8 @@
 #include "leds.h"
 #include "screen.h"
 #include "battery.h"
+#include "chats.h"
+#include "i18n.h"
 #include "update.h"
 #include "version.h"
 #include <time.h>
@@ -534,6 +536,10 @@ static void runLive() {
   last = p;
 }
 
+// the wake word (= the name) heard since the start; another one needs a restart (WakeNet loads at the start)
+EXT_RAM_BSS_ATTR static settings::Conv bootConv;
+static int64_t renameAt = 0;
+
 // ---- BOOT pressed 5x quickly: the menu (restart, hotspot mode, switch off, factory settings). Every
 // action asks once more, so a stray touch never does anything; it goes after a short goodbye on the display.
 static bool menuOpen = false;
@@ -545,12 +551,13 @@ static void menuStatus(char* s, int cap) {
   int b = battery::level();
   char bat[24] = "";
   if (b >= 0) snprintf(bat, sizeof(bat), "  ·  %d %%%s", b, battery::charging() ? "+" : "");
-  snprintf(s, cap, "Pixel Buddy %s  ·  %s%s", PIXEL_VERSION, net::hotspot() ? "Hotspot" : "WLAN", bat);
+  snprintf(s, cap, "Pixel Buddy %s  ·  %s%s", PIXEL_VERSION, net::hotspot() ? i18n::t(i18n::T_HOTSPOT) : i18n::t(i18n::T_WIFI), bat);
 }
 static void menuShow() {
   char st[56];
   menuStatus(st, sizeof(st));
-  const char* labels[] = {"Neustart", net::hotspot() ? "Heimnetz" : "Hotspot", "Aus", "Reset"};
+  const char* labels[] = {i18n::t(i18n::T_RESTART), net::hotspot() ? i18n::t(i18n::T_HOME) : i18n::t(i18n::T_HOTSPOT), i18n::t(i18n::T_OFF),
+                          i18n::t(i18n::T_RESET)};
   const int icons[] = {screen::IC_RESTART, net::hotspot() ? screen::IC_HOME : screen::IC_HOTSPOT, screen::IC_POWER,
                        screen::IC_RESET};
   const uint32_t cols[] = {C_BLUE, C_MINT, C_LILAC, C_ROUGE};
@@ -563,21 +570,21 @@ static void menuAsk(int k) {
   char st[56], line[80];
   menuStatus(st, sizeof(st));
   menuQ = k;
+  using namespace i18n;
+  const char *yes = t(T_YES), *no = t(T_NO);
   if (k == 0) {
-    screen::ask(st, screen::IC_RESTART, C_BLUE, "Neu starten?", "Gleich wieder da.", "Ja", 0);
+    screen::ask(st, screen::IC_RESTART, C_BLUE, t(T_ASK_RESTART), t(T_ASK_RESTART_L), yes, no, 0);
   } else if (k == 1 && !net::hotspot() && !net::hotspotSsid()[0]) {
-    screen::ask(st, screen::IC_HOTSPOT, C_MINT, "Kein Hotspot",
-                "Im Webinterface:\nGerät > Unterwegs", nullptr, 1);
+    screen::ask(st, screen::IC_HOTSPOT, C_MINT, t(T_NO_HOTSPOT), t(T_NO_HOTSPOT_L), nullptr, t(T_OK), 1);
   } else if (k == 1 && !net::hotspot()) {
-    snprintf(line, sizeof(line), "Verbinde mich mit\n%s", net::hotspotSsid());
-    screen::ask(st, screen::IC_HOTSPOT, C_MINT, "Zum Hotspot?", line, "Ja", 0);
+    snprintf(line, sizeof(line), t(T_ASK_HOTSPOT_L), net::hotspotSsid());
+    screen::ask(st, screen::IC_HOTSPOT, C_MINT, t(T_ASK_HOTSPOT), line, yes, no, 0);
   } else if (k == 1) {
-    screen::ask(st, screen::IC_HOME, C_MINT, "Zum Heimnetz?", "Zurück in dein\nWLAN zu Hause.", "Ja", 0);
+    screen::ask(st, screen::IC_HOME, C_MINT, t(T_ASK_HOME), t(T_ASK_HOME_L), yes, no, 0);
   } else if (k == 2) {
-    screen::ask(st, screen::IC_POWER, C_LILAC, "Ausschalten?", "Wieder an:\nTaste BOOT drücken.", "Ja", 2);
+    screen::ask(st, screen::IC_POWER, C_LILAC, t(T_ASK_OFF), t(T_ASK_OFF_L), yes, no, 2);
   } else {
-    screen::ask(st, screen::IC_RESET, C_ROUGE, "Alles löschen?",
-                "Setzt alles zurück:\nWLAN, Key, Verlauf", "Löschen", 1);
+    screen::ask(st, screen::IC_RESET, C_ROUGE, t(T_ASK_RESET), t(T_ASK_RESET_L), t(T_ERASE), no, 1);
   }
 }
 static void menuClose() {
@@ -589,8 +596,7 @@ static void factoryReset() {
   settings::factory();  // look, personality, smart home, OpenAI key
   assist::wipe();       // timers, memory, costs
   net::forgetWifi();    // the network from the setup (a network built into the firmware stays)
-  remove("/sdcard/pixel/chat.log");
-  remove("/sdcard/pixel/chat.old.log");
+  chats::clear();
   vTaskDelay(pdMS_TO_TICKS(300));
   esp_restart();
 }
@@ -600,9 +606,10 @@ static void menuDo(int k) {
     net::setHotspot(!net::hotspot());
     printf("hotspot mode %s\n", net::hotspot() ? "off" : "on");
   }
-  static const char* const TITLE[] = {"BIS GLEICH!", "", "GUTE NACHT", "ALLES NEU"};
-  static const char* const LINE[] = {"starte neu ...", "starte neu ...", "", "lösche ..."};
-  screen::splash(k == 1 ? (net::hotspot() ? "HEIMNETZ" : "HOTSPOT") : TITLE[k], LINE[k]);
+  using namespace i18n;
+  const char* title[] = {t(T_BYE_RESTART), net::hotspot() ? t(T_HOME) : t(T_HOTSPOT), t(T_BYE_OFF), t(T_BYE_RESET)};
+  const char* line[] = {t(T_RESTARTING), t(T_RESTARTING), "", t(T_ERASING)};
+  screen::splash(title[k], line[k]);
   act = k;
   actAt = esp_timer_get_time() + 1300000;
 }
@@ -790,7 +797,9 @@ static void applySettings() {
   }
   wakeBeep = c.wakeBeep;
   mic::setVolume(sched && sv >= 0 ? sv : c.volume);
-  mic::setWakeWords(strcmp(c.wake, "halloesp") != 0, strcmp(c.wake, "pixel") != 0, c.wakeSens);
+  bool own = !settings::wakeOf(bootConv.wake).model;
+  mic::setWakeWords(own, !own, c.wakeSens);
+  if (strcmp(c.wake, bootConv.wake) && !renameAt) renameAt = esp_timer_get_time() + 1500000;  // a new name
 }
 
 static void publishStatus(float fps) {
@@ -913,16 +922,28 @@ static void setupScreen() {
   if (joined) {
     snprintf(qr, sizeof(qr), "http://%s/", net::ip());
     snprintf(l1, sizeof(l1), "%s", net::ip());
-    screen::show("Verbunden!", qr, l1, "pixel.local");
+    screen::show(i18n::t(i18n::T_CONNECTED), qr, l1, i18n::t(i18n::T_CONNECTED_L));
   } else {
     snprintf(qr, sizeof(qr), "WIFI:T:WPA;S:%s;P:%s;;", net::setupSsid(), net::setupPass());
-    snprintf(l1, sizeof(l1), "%s", net::setupSsid());
-    snprintf(l2, sizeof(l2), "Passwort %s", net::setupPass());
-    screen::show("WLAN einrichten", qr, l1, l2, "dann 192.168.4.1");
+    snprintf(l1, sizeof(l1), i18n::t(i18n::T_SETUP_JOIN), net::setupSsid());
+    snprintf(l2, sizeof(l2), i18n::t(i18n::T_SETUP_PASS), net::setupPass());
+    screen::show(i18n::t(i18n::T_SETUP_TITLE), qr, l1, l2, i18n::t(i18n::T_SETUP_OPEN));
   }
 }
 
 static void houseKeeping(int64_t now) {
+  if (renameAt && now > renameAt && !live::active() && !menuOpen) {  // called by another name: it says hello
+    static bool shown = false;
+    if (!shown) {
+      shown = true;
+      EXT_RAM_BSS_ATTR static settings::Conv nc;  // (big: not on the stack)
+      settings::conv(nc);
+      screen::splash(nc.name, i18n::t(i18n::T_RESTARTING));
+      renameAt = now + 1500000;
+    } else {
+      esp_restart();
+    }
+  }
   ringTick(now);
   ledsTick(now);
   // lamps changed in Home Assistant: the mood light follows one of them, others show on the eyes
@@ -959,6 +980,8 @@ static void houseKeeping(int64_t now) {
     printf("update: daily check\n");
     update::check(true);
   }
+  // after an update over WiFi: the wake word models that belong to this firmware (once, at home)
+  if (net::connected() && !net::hotspot() && !live::active() && !menuOpen) update::models();
   static int lastSched = -2;  // the schedule reached its next step
   int sb = -1, sv = -1;
   int sched = t > 1700000000 && settings::scheduled(h * 60 + tmv.tm_min, sb, sv) ? sb * 1000 + sv : -1;
@@ -998,7 +1021,7 @@ static void frameTask(void*) {
   clearMode = true;
   drawRect({0, 0, 240, 240});
   clearMode = false;
-  screen::splash("PIXEL BUDDY", PIXEL_VERSION);
+  screen::brand(PIXEL_VERSION);
 
   int64_t last = esp_timer_get_time(), statT = last, bootT = last, statusT = last;
   float lastFps = 0;
@@ -1156,12 +1179,15 @@ extern "C" void app_main(void) {
   cJSON_Hooks hooks = {[](size_t n) { return heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); }, free};
   cJSON_InitHooks(&hooks);
   sd::mount();
+  chats::init();
   settings::init();
   assist::init();
   touchInit();
   leds::init();
   battery::init();
-  if (CFG_MIC_ENABLE && !mic::start()) ESP_LOGW(TAG, "microphone unavailable, listening animation disabled");
+  settings::conv(bootConv);  // the wake word (= the name) heard from now on; another one counts after a restart
+  if (CFG_MIC_ENABLE && !mic::start(settings::wakeOf(bootConv.wake).model))
+    ESP_LOGW(TAG, "microphone unavailable, listening animation disabled");
   net::start();
   live::start();
   eyes::init(esp_random());

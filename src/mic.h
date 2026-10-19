@@ -12,13 +12,16 @@ struct State {
   float noise;   // adaptive noise floor
 };
 
-bool start();    // codec + I2S + analysis task; false if the codec does not answer
+bool start(const char* wakeModel);  // codec + I2S + analysis task (+ that WakeNet model, nullptr = only "Pixel");
+                                    // false if the codec does not answer
 State get();
 void setDebug(bool on);
 int wakeWords();  // increments on every detected wake word
 void setWake(bool on);
 // active wake words: "Pixel" (own network) and/or "Hallo ESP" (WakeNet), Pixel sensitivity 0..1
 void setWakeWords(bool pixel, bool halloEsp, float sensitivity);
+void wakeStop();                       // no more WakeNet (its model partition is about to be rewritten)
+bool hasWakeModel(const char* model);  // in the "model" partition (a choice of name)
 int record(int16_t* dst, int samples);   // blocking: the next samples of the microphone (wake word dataset)
 void fakeWake();
 // music nearby: confidence 0..1, tempo, continuous beat position, how loud 0..1, how driving 0..1

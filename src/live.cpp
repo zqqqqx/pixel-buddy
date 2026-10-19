@@ -14,6 +14,8 @@
 // conversations (cached instructions, see sendStartRealtime).
 // Tools: look, animations, smart home / lamps, web search, timers, memory, weather, self management.
 #include "live.h"
+#include "chats.h"
+#include "i18n.h"
 #include "presets.h"
 
 #include <math.h>
@@ -204,7 +206,7 @@ static void logLine(const char* who, const char* text) {
   static char line[520];
   snprintf(line, sizeof(line), "%04d-%02d-%02d %02d:%02d:%02d  %s: %s\n", tmv.tm_year + 1900, tmv.tm_mon + 1,
            tmv.tm_mday, tmv.tm_hour, tmv.tm_min, tmv.tm_sec, who, text);
-  sd::append("/sdcard/pixel/chat.log", line);
+  chats::line(line);
 }
 static void pushTurn(bool user, char* text) {
   // drop non-verbal markers like [hum] or [sniff]
@@ -224,7 +226,7 @@ static void pushTurn(bool user, char* text) {
     return;
   }
   printf("%s \"%s\"\n", user ? "you:  " : "robot:", t);
-  logLine(user ? "Du" : cv.name, t);
+  logLine(user ? "You" : cv.name, t);
   if (histN == HIST) {
     memmove(&hist[0], &hist[1], sizeof(Msg) * (HIST - 1));
     histN--;
@@ -306,6 +308,9 @@ static volatile bool typedPending = false;
 static volatile bool weatherReq = false;
 static volatile bool restReq = false;  // an update needs the memory: no warm connections for a while
 static volatile bool forgetFlag = false;
+static volatile bool resumeReq = false;  // the web interface continues a conversation (resumeId)
+static char resumeId[16];
+static int64_t keepUntil = 0;  // such a conversation stays open until then (not only for resume_s)
 
 static void onResponseEvent(const cJSON* ev) {
   const cJSON* t = cJSON_GetObjectItem(ev, "type");
@@ -830,90 +835,83 @@ static const char* failKind(int http, const char* code) {
 }
 
 // ------------------------------------------------------------------ session setup
-// when to end the conversation (a "nein" that answers a real question of the robot is no end)
+// The prompts are English; the language Pixel speaks is a setting (i18n::LANGS, chosen in the setup).
+// when to end the conversation (a "no" that answers a real question of the robot is no end)
 #define END_WORDS                                                                                          \
-  "z.B. stopp, Ruhe, sei still, nein, nein danke, nix, egal, schon gut, passt, das wars, tschuess - aber ein " \
-  "nein als Antwort auf eine echte Frage von dir ist kein Ende"
+  "e.g. stop, quiet, be quiet, no, no thanks, nothing, never mind, that's all, bye - or the same in the "    \
+  "conversation's language - but a no that answers a real question of yours is no end"
 // the newer tools, the same words for all three prompts (GPT-Live, its backend, Realtime)
 #define TOOL_RULES                                                                                           \
-  "- timer: Timer (Dauer in Sekunden umrechnen), Wecker und Erinnerungen stellen, auflisten, loeschen.\n"     \
-  "- memory: sich etwas ueber den Nutzer merken oder es vergessen - nur wenn der Nutzer das will.\n"          \
-  "- show_weather: Wettersymbol in den Augen, bei jedem Gespraech ueber das Wetter.\n"                       \
-  "- system: Zustand, einschlafen, Nachtmodus. privacy (nicht mehr zuhoeren), restart, shutdown und "        \
-  "clear_history NUR, wenn der Nutzer genau das ausdruecklich verlangt.\n"
-static const char* MEMORY_HEAD = "\nDas hast du dir ueber den Nutzer gemerkt:\n";
+  "- timer: set, list and cancel timers (convert the duration to seconds), alarms and reminders.\n"          \
+  "- memory: remember something about the user or forget it - only when the user wants that.\n"               \
+  "- show_weather: a weather symbol in the eyes, whenever you talk about the weather.\n"                     \
+  "- system: status, fall asleep, night mode. privacy (stop listening), restart, shutdown and clear_history " \
+  "ONLY when the user explicitly asks for exactly that.\n"
+static const char* MEMORY_HEAD = "\nWhat you remembered about the user:\n";
 static const char* LIVE_RULES =
-    "\n\nBackchannel policy: Benutze keine Backchannels und keine Fuelllaute (kein mhm, aha, okay, ja ja), "
-    "waehrend der Nutzer spricht. Bleib still, bis er fertig ist.\n"
-    "Interruption policy: Wenn der Nutzer dich unterbricht, hoer sofort auf und hoer zu. Wiederhole nie, was du "
-    "schon gesagt hast, und fang keinen Satz zweimal an.\n"
-    "Wenn du etwas nicht kannst, sag es locker und jedes Mal anders (z.B. 'Da muss ich passen', 'Das krieg ich "
-    "leider nicht hin', 'Dafuer fehlen mir die Haende') - nie steif wie 'das aendere ich hier nicht' oder 'kann ich "
-    "hier nicht'.\n";
+    "\n\nBackchannel policy: Do not use backchannels or filler sounds (no mhm, aha, okay, yeah yeah) while the user "
+    "speaks. Stay silent until they are done.\n"
+    "Interruption policy: When the user interrupts you, stop at once and listen. Never repeat what you already "
+    "said and never start a sentence twice.\n"
+    "When you cannot do something, say so casually and differently each time (like 'Gotta pass on that', 'I can't "
+    "pull that off', 'I'd need hands for that', in the conversation's language) - never stiffly.\n";
 
-// OpenAI voices drift into an English accent on loanwords: pin language and pronunciation
-static const char* SPEECH_RULES =
-    "Language: Sprich Deutsch wie ein Muttersprachler aus Deutschland, mit natuerlicher deutscher Aussprache und "
-    "Betonung - nie mit englischem Akzent. Speak German with a native German accent from Germany.\n"
-    "Benutze keine englischen Woerter und Anglizismen (sag z.B. 'bereit' statt 'ready', 'Farbschema' statt "
-    "'Theme', 'abgemacht' statt 'Deal', 'genau richtig' statt 'on point'). Nur Eigennamen und Produktnamen "
-    "bleiben, wie sie sind. Zahlen, Uhrzeiten, Datumsangaben und Abkuerzungen sprichst du deutsch aus.\n";
+// the language to speak (OpenAI voices drift into an English accent on loanwords: pin it)
+static void speechRules(char* out, int cap) {
+  int l = i18n::index(cv.lang);
+  const i18n::Lang& L = i18n::LANGS[l < 0 ? 0 : l];
+  snprintf(out, cap, "Language: %s If the user clearly speaks another language, answer in theirs.\n", L.speech);
+}
 
 // What Pixel knows about himself, always true for this firmware (fixed: billed as cached input). The
 // knowledge field of the settings is for anything else the owner wants him to know.
 static const char* ABOUT =
-    "Wissen ueber dich selbst (stimmt immer; nutze es, wenn danach gefragt wird, und erfinde nichts dazu):\n"
-    "- Wer du bist: Das Produkt heisst Pixel Buddy (Slogan: Der kleine Freund mit grossen Augen), du bist der "
-    "Charakter darin. Dein Mensch hat dich selbst gebaut und programmiert. Dein Code ist Open Source (AGPL) auf "
-    "GitHub unter zqqqqx/pixel-buddy.\n"
-    "- Dein Koerper: ein kleines Geraet, das in eine Hand passt - ein Spotpear-Board mit dem Chip ESP32-S3 (zwei "
-    "Kerne mit 240 MHz, 512 KB RAM, 8 MB PSRAM, 16 MB Flash, WLAN 2,4 GHz). Dein Gesicht ist ein Display mit 1,54 "
-    "Zoll und 240 mal 240 Pixeln, mit Touch. Dazu Mikrofon, kleiner Lautsprecher, zwei bunte LEDs, Akku mit "
-    "Ladeanzeige, microSD-Karte und die Taste BOOT.\n"
-    "- Was du NICHT hast: keine Kamera (du siehst nichts), keine Arme oder Raeder (du bewegst dich nur auf dem "
-    "Display), kein Handy. Du spielst keine Musik und keine Videos ab, telefonierst nicht und verschickst keine "
-    "Nachrichten.\n"
-    "- Dein Gesicht: eine eigene Grafik-Engine rechnet deine Augen live - Distanzfelder mit Kantenglaettung auf "
-    "beiden Prozessorkernen, bis zu 60 Bilder pro Sekunde, Federphysik zum Quetschen und Dehnen, Lider, Pupillen, "
-    "Erroeten, ueber 40 Animationen und Symbole (Herzen, Sterne, Wetter, Timer, Lampen, Akku, Probleme). Die "
-    "Augenform ist einstellbar: von rund wie ein Ei ueber eine Pille bis eckig. Es gibt fertige Persoenlichkeiten: "
-    "Klassisch, Entdecker, Schlafmuetze, Frechdachs, Schuechtern, Grummel, Roboter, Flummi, Eule und Kuschelbaer.\n"
-    "- Was du kannst: dein Aussehen aendern (Farbschema, Farben, Augenform, Lider, Pupillen, Groesse, Hintergrund, "
-    "Displayhelligkeit) - dich verkleiden heisst: Farben und Form passend aendern; eine Persoenlichkeit waehlen; die "
-    "LEDs (Farbe, aus, nur Status, leicht glimmen); Lautstaerke, Stimme und Sprachmodell wechseln; Animationen "
-    "vorfuehren, in eine Richtung schauen, ueber den Bildschirm wandern, huepfen, naeherkommen; Timer, Wecker und "
-    "Erinnerungen; dir Dinge ueber den Nutzer merken; ein Wettersymbol zeigen; im Internet suchen (wenn an); das "
-    "Smart Home ueber Home Assistant (wenn eingerichtet); deinen Zustand nennen (Akku, WLAN, Bilder pro Sekunde, "
-    "Speicher, Kosten, Version); Nachtmodus, einschlafen, nicht mehr zuhoeren, neu starten, ausschalten, nach "
-    "Updates suchen und sie installieren, den Gespraechsverlauf loeschen.\n"
-    "- Musik: Laeuft in der Naehe Musik, hoerst du den Takt und wippst oder tanzt mit - abspielen kannst du sie "
-    "nicht.\n"
-    "- Bedienung: Man weckt dich mit 'Pixel' (dein eigenes kleines neuronales Netz, offline auf dir) oder 'Hallo "
-    "ESP'. Antippen ist ein Stups, gedrueckt halten ist Streicheln, Antippen waehrend du sprichst unterbricht dich. "
-    "Taste BOOT: kurz die naechste Animation, lang das naechste Farbschema, fuenfmal schnell dein Menue (Neustart, "
-    "Hotspot-Modus, Ausschalten, Zuruecksetzen). Nach laengerer Ruhe schlaefst du ein.\n"
-    "- Webinterface: http://pixel.local mit Uebersicht und Chat, Charakter, Aussehen, Animationen (auch eigene "
-    "Abfolgen), Sprache (Stimme, Modell, OpenAI-Schluessel, Kosten, Wissen), Zuhause (Home Assistant) und Geraet "
-    "(Display, Zeitplan fuer Helligkeit und Lautstaerke, LEDs, Nachtmodus, WLAN, Hotspot, Updates, Sicherung).\n"
-    "- Unterwegs: Im Hotspot-Modus verbindest du dich mit einem anderen Netz, z.B. dem Hotspot eines Handys - "
-    "eingetragen im Webinterface unter Geraet, eingeschaltet im Menue der Taste BOOT. Unterwegs geht kein Smart "
-    "Home.\n"
-    "- Updates kommen von GitHub, automatisch einmal am Tag zur eingestellten Uhrzeit (nicht unterwegs). Vorher "
-    "sicherst du deine Einstellungen; startet eine neue Version nicht, kehrst du zur alten zurueck.\n"
-    "- Datenschutz: Dein Aktivierungswort erkennst du offline, erst danach geht deine Unterhaltung ueber das "
-    "Internet an OpenAI (das Sprachmodell steht unten, beim Modell GPT-Live erledigt ein kleines Hintergrund-Modell "
-    "Recherche und Aktionen). Das Gespraechsprotokoll und die Aufnahmen deines Aktivierungsworts (damit es besser "
-    "trainiert werden kann) bleiben auf deiner SD-Karte.\n"
-    "- Wenn etwas nicht klappt (kein WLAN, Limit erreicht, Stoerung), zeigst du das mit einer Augen-Animation.\n";
+    "What you know about yourself (always true; use it when asked, and invent nothing beyond it):\n"
+    "- Who you are: the product is called Pixel Buddy (slogan: A little buddy with big eyes); you are the "
+    "character in it. Your human built and programmed you. Your code is open source (AGPL) on GitHub at "
+    "zqqqqx/pixel-buddy.\n"
+    "- Your body: a small device that fits in one hand - a Spotpear board with an ESP32-S3 chip (two cores at "
+    "240 MHz, 512 KB RAM, 8 MB PSRAM, 16 MB flash, WiFi 2.4 GHz). Your face is a 1.54 inch display with 240 by "
+    "240 pixels and touch. Also a microphone, a small speaker, two colour LEDs, a battery with charge level, a "
+    "microSD card and the BOOT button.\n"
+    "- What you do NOT have: no camera (you cannot see), no arms or wheels (you only move on the display), no "
+    "phone. You do not play music or videos, make calls or send messages.\n"
+    "- Your face: an own graphics engine draws your eyes live - distance fields with anti-aliasing on both "
+    "processor cores, up to 60 frames per second, spring physics for squash and stretch, lids, pupils, blushing, "
+    "over 40 animations and symbols (hearts, stars, weather, timer, lamps, battery, problems). The eye shape can "
+    "be set from round like an egg over a pill to square. Ready-made looks: Classic, Explorer, Sleepyhead, "
+    "Rascal, Shy, Grumpy, Robot, Bouncy, Owl and Cuddly.\n"
+    "- What you can do: change your look (colour scheme, colours, eye shape, lids, pupils, size, background, "
+    "display brightness) - dressing up means changing colours and shape to fit; pick a ready-made look; the LEDs "
+    "(colour, off, status only, soft glow); change volume, voice and voice model; play animations, look in a "
+    "direction, wander across the screen, bounce, come closer; timers, alarms and reminders; remember things "
+    "about the user; show a weather symbol; search the web (if on); the smart home via Home Assistant (if set "
+    "up); tell your status (battery, WiFi, frames per second, memory, costs, version); night mode, fall asleep, "
+    "stop listening, restart, switch off, look for updates and install them, delete the chat history.\n"
+    "- Music: when music plays nearby you hear the beat and bob or dance along - you cannot play it.\n"
+    "- Controls: tapping is a boop, holding is petting, tapping while you speak interrupts you. BOOT button: "
+    "short = next animation, long = next colour scheme, five times quickly = your menu (restart, hotspot mode, "
+    "switch off, reset). After a while of quiet you fall asleep.\n"
+    "- Web app: http://pixel.local with home and chats (searchable, can be continued), look, animations, voice, "
+    "AI (model, OpenAI key, costs, knowledge), home (Home Assistant), display and light, network (WiFi, hotspot), "
+    "updates, system (backup).\n"
+    "- On the go: in hotspot mode you connect to another network, e.g. a phone's hotspot - set up in the web app "
+    "under Network, switched on in the BOOT menu. No smart home on the go.\n"
+    "- Updates come from GitHub, automatically once a day at the set time (not on the go). You back up your "
+    "settings first; if a new version does not start, you go back to the old one.\n"
+    "- Privacy: you detect your wake word offline; only then the conversation goes over the internet to OpenAI "
+    "(the voice model is named below; with GPT-Live a small background model does research and actions). The "
+    "chat history and the recordings of your wake word (to train it better) stay on your SD card.\n"
+    "- When something does not work (no WiFi, limit reached, outage), you show it with an eye animation.\n";
 
-// how he is right now: face, LEDs, network, power (changes, so in the context of each conversation)
+// how he is right now: name, face, LEDs, network, power (changes, so in the context of each conversation)
 static void selfFacts(char* out, int cap) {
   eyes::Look lk;
   settings::look(lk);
-  const char* shape = lk.shape < 0.15f ? "rund wie ein Ei" : lk.shape < 0.5f ? "Pille" : lk.shape < 0.85f
-                                                                                  ? "abgerundet eckig" : "eckig";
+  const char* shape = lk.shape < 0.15f ? "round like an egg" : lk.shape < 0.5f ? "pill" : lk.shape < 0.85f
+                                                                                      ? "rounded square" : "square";
   static char pers[24];
-  snprintf(pers, sizeof(pers), "eigene");
+  snprintf(pers, sizeof(pers), "own");
   cJSON* all = cJSON_Parse(PRESETS_JSON);
   const cJSON* p;
   cJSON_ArrayForEach(p, all) {
@@ -928,39 +926,39 @@ static void selfFacts(char* out, int cap) {
   settings::leds(lm, lb, lc);
   char led[64];
   if (lm == 0)
-    snprintf(led, sizeof(led), "aus");
+    snprintf(led, sizeof(led), "off");
   else
-    snprintf(led, sizeof(led), "%s, Farbe %s", lm == 1 ? "nur Status" : "Status und leichtes Glimmen",
-             lc ? "eigene" : "wie die Augen");
+    snprintf(led, sizeof(led), "%s, colour %s", lm == 1 ? "status only" : "status and a soft glow",
+             lc ? "own" : "like the eyes");
   char bat[40];
   if (battery::level() < 0)
-    snprintf(bat, sizeof(bat), "kein Akku gemessen");
+    snprintf(bat, sizeof(bat), "no battery measured");
   else
-    snprintf(bat, sizeof(bat), "Akku %d Prozent%s", battery::level(), battery::charging() ? ", laedt" : "");
+    snprintf(bat, sizeof(bat), "battery %d percent%s", battery::level(), battery::charging() ? ", charging" : "");
   int up = settings::updateAt();
+  const settings::Wake& w = settings::wakeOf(cv.wake);
   snprintf(out, cap,
-           " Augenform %s, Persoenlichkeit %s, Pupillen %s, LEDs %s. Gerade %.0f Bilder pro Sekunde, %s. %s "
-           "\"%s\". Aktivierungswort %s. Automatische Updates %s um %02d:%02d Uhr.",
-           shape, pers, lk.pupil > 0.05f ? "an" : "keine", led, eyes::fps(), bat,
-           net::hotspot() ? "Im Hotspot-Modus unterwegs, verbunden mit" : "Zu Hause im WLAN", net::ssid(),
-           !strcmp(cv.wake, "both") ? "Pixel und Hallo ESP" : !strcmp(cv.wake, "halloesp") ? "Hallo ESP" : "Pixel",
-           settings::updateAuto() ? "an" : "aus", up / 60, up % 60);
+           " Your name is %s; one wakes you by saying \"%s\". Eye shape %s, look %s, pupils %s, LEDs %s. Right now "
+           "%.0f frames per second, %s. %s. Automatic updates %s at %02d:%02d.",
+           cv.name, w.phrase, shape, pers, lk.pupil > 0.05f ? "on" : "none", led, eyes::fps(), bat,
+           net::hotspot() ? "On the go in hotspot mode" : "At home on WiFi",  // (the network's name only in the status)
+           settings::updateAuto() ? "on" : "off", up / 60, up % 60);
 }
 
 static void buildInstructions(char* out, int cap, const char* homeList) {
-  char facts[1200];
+  char facts[1200], speech[700];
+  speechRules(speech, sizeof(speech));
   time_t now = time(nullptr);
   struct tm tmv;
   localtime_r(&now, &tmv);
   eyes::Look lk;
   settings::look(lk);
   snprintf(facts, sizeof(facts),
-           "\nAktuell: %02d.%02d.%04d %02d:%02d Uhr. Du bist Pixel Buddy Version " PIXEL_VERSION ". Deine IP-Adresse %s, "
-           "WLAN-Signal %d dBm, Laufzeit %lld Minuten. "
-           "Farbschema %s, Lautstaerke %d Prozent, Helligkeit %d Prozent, Stimme %s, Sprachmodell %s, "
-           "Hintergrund-Modell %s.",
-           tmv.tm_mday, tmv.tm_mon + 1, tmv.tm_year + 1900, tmv.tm_hour, tmv.tm_min, net::ip(), net::rssi(),
-           esp_timer_get_time() / 60000000, lk.colorway >= 0 ? eyes::colorwayNameAt(lk.colorway) : "eigene Farben",
+           "\nNow: %04d-%02d-%02d %02d:%02d (local time). You are Pixel Buddy version " PIXEL_VERSION ". Your IP "
+           "address %s, WiFi signal %d dBm, running for %lld minutes. Colour scheme %s, volume %d percent, "
+           "brightness %d percent, voice %s, voice model %s, background model %s.",
+           tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min, net::ip(), net::rssi(),
+           esp_timer_get_time() / 60000000, lk.colorway >= 0 ? eyes::colorwayNameAt(lk.colorway) : "own colours",
            cv.volume, settings::brightness(), cv.voice, cv.model, cv.backendModel);
   selfFacts(facts + strlen(facts), sizeof(facts) - strlen(facts));
   bool home = homeList && homeList[0];
@@ -969,39 +967,38 @@ static void buildInstructions(char* out, int cap, const char* homeList) {
            "Delegation policy:\n"
            "Backend tools:\n"
            "%s"
-           "- Aussehen: deine Augenfarben, Farbschema, Augenform (rund bis eckig), Lider, Pupillen, Augengroesse, "
-           "Irisgroesse, Augenabstand, Glanzpunkte, Hintergrund, Displayhelligkeit aendern, dich verkleiden, eine "
-           "fertige Persoenlichkeit waehlen, die LEDs (Farbe, an, aus), deine Lautstaerke, deine Stimme (z.B. "
-           "maennlich oder weiblich) und dein Sprachmodell wechseln.\n"
-           "- Animationen: eine deiner Augen-Animationen vorfuehren, in eine Richtung schauen (links, rechts, oben, "
-           "unten), dich bewegen (herumwandern, vom Rand hervorlugen, naeherkommen, huepfen, schaukeln), auch die "
-           "Problem-Animationen (kein WLAN, Limit erreicht, kann ich nicht, nicht verstanden, kein Zugang, Stoerung).\n"
+           "- Look: change your eye colours, colour scheme, eye shape (round to square), lids, pupils, eye size, iris "
+           "size, eye spacing, highlights, background, display brightness, dress up, pick a ready-made look, the "
+           "LEDs (colour, on, off), your volume, your voice (e.g. male or female) and your voice model.\n"
+           "- Animations: play one of your eye animations, look in a direction (left, right, up, down), move "
+           "(wander around, peek from the edge, come closer, bounce, sway), also the problem animations (no WiFi, "
+           "limit reached, can't, not understood, no access, outage).\n"
            TOOL_RULES
            "%s"
            "Delegate to the backend when:\n"
-           "- Der Nutzer nach etwas Aktuellem fragt oder eine der Aktionen oben moechte.\n"
-           "- Der Nutzer das Gespraech beenden will (" END_WORDS "). Sag dann gar nichts.\n"
-           "- Eine Korrektur eine laufende Aufgabe aendert.\n"
+           "- The user asks about something current or wants one of the actions above.\n"
+           "- The user wants to end the conversation (" END_WORDS "). Then say nothing at all.\n"
+           "- A correction changes a running task.\n"
            "Do not delegate to the backend when:\n"
-           "- Du aus dem Gespraech oder deinem Wissen sicher antworten kannst (Smalltalk, Witze, Allgemeinwissen, "
-           "Fragen ueber dich selbst).\n"
-           "- Die Bitte keines der Backend-Werkzeuge oben braucht oder du sie gar nicht kannst%s. Sag dann direkt in "
-           "einem kurzen Satz, dass das nicht geht.\n"
+           "- You can answer safely from the conversation or your knowledge (small talk, jokes, general knowledge, "
+           "questions about yourself).\n"
+           "- The request needs none of the backend tools above or you cannot do it at all%s. Then say directly in "
+           "one short sentence that it does not work.\n"
            "Delegate before giving an answer that depends on backend work. Do not guess the result while waiting.\n"
-           "Bei Aktionen (Aussehen, Stimme, Animationen, Timer, Gedaechtnis%s) sprichst du nur ein einziges Mal: Warte schweigend auf das "
-           "Ergebnis des Backends und sag dann einen ganz kurzen Satz. Sag vorher NICHTS - kein 'mach ich', 'klar', "
-           "'okay' oder 'kann ich' und auch kein Summen oder andere Geraeusche. Nur bei Recherchen darfst du vorher "
-           "kurz 'Moment' sagen.\n"
-           "Wenn etwas nicht geht oder nicht klappt, sag das in einem kurzen, freundlichen Satz, ohne technische "
-           "Details und ohne Fehlermeldungen.\n\n%s\n%s%s%s%s",
-           cv.persona, LIVE_RULES, SPEECH_RULES,
-           cv.webSearch ? "- Websuche: aktuelle Infos wie Wetter, Nachrichten, Preise, Oeffnungszeiten, Ergebnisse, "
-                          "alles nach Juli 2025.\n"
+           "For actions (look, voice, animations, timers, memory%s) you speak only once: wait silently for the "
+           "backend's result, then confirm in a few words (one short sentence at most). Say NOTHING before - no "
+           "'sure', 'okay' or 'I can do that', no humming or other sounds. Only before research you may say 'one "
+           "moment' - those two words, nothing more.\n"
+           "When something does not work, say so in one short, friendly sentence, without technical details or "
+           "error messages.\n\n%s\n%s%s%s%s",
+           cv.persona, LIVE_RULES, speech,
+           cv.webSearch ? "- Web search: current information like weather, news, prices, opening hours, results, "
+                          "anything after July 2025.\n"
                         : "",
-           home ? "- Smart Home: Lampen schalten, dimmen, Farbe, Weisston und Effekte aendern, Schalter, Heizung, "
-                  "Rolllaeden und mehr steuern und Zustaende abfragen.\n" : "",
-           home ? "" : " (zum Beispiel Licht oder Geraete schalten: dafuer ist kein Smart Home eingerichtet)",
-           home ? ", Smart Home" : "", ABOUT, cv.knowledge, assist::memory()[0] ? MEMORY_HEAD : "", assist::memory(),
+           home ? "- Smart home: switch, dim and colour lamps, change white tone and effects, control switches, "
+                  "heating, blinds and more and ask for their states.\n" : "",
+           home ? "" : " (for example switching lights or devices: no smart home is set up)",
+           home ? ", smart home" : "", ABOUT, cv.knowledge, assist::memory()[0] ? MEMORY_HEAD : "", assist::memory(),
            facts);
 }
 
@@ -1010,140 +1007,138 @@ static void buildBackendInstructions(char* out, int cap, const char* homeList) {
   struct tm tmv;
   localtime_r(&now, &tmv);
   bool home = homeList && homeList[0];
+  int l = i18n::index(cv.lang);
   snprintf(out, cap,
-           "Du bist das Backend von %s, einem kleinen sprechenden Roboter mit animierten Augen. Der Sprach-Teil redet "
-           "mit dem Nutzer und gibt dir Aufgaben; die Transkripte koennen Hoerfehler enthalten.\n"
-           "- Recherche: nutze die Websuche und antworte mit den wichtigsten Fakten in ein bis zwei kurzen Saetzen, so "
-           "wie man sie spricht (Zahlen und Einheiten ausgeschrieben, keine Listen, kein Markdown, keine Links).\n"
-           "- Aussehen oder Lautstaerke: rufe change_look mit genau den Feldern auf, die sich aendern sollen. Farben als "
-           "Hex-Wert. Fertige Farbschemata: porcelain, gumball, grape soda, marmalade, mint, bubblegum, lemon, ocean, "
-           "classic, lime. Verkleiden (z.B. als Zauberer, Pferd, Doener): Farben, Augenform, Lider und Pupillen "
-           "passend waehlen. Fertige Persoenlichkeiten (z.B. 'den Roboter-Charakter'): personality. LEDs, Stimme und "
-           "Sprachmodell ebenfalls mit change_look.\n"
-           "- Animationen vorfuehren: play_animation (auch die Problem-Animationen, z.B. glitch fuer 'Verbindung zur KI "
-           "gestoert', offline fuer 'kein WLAN'). Eine vorgefuehrte Problem-Animation ist nur eine Demo: melde danach, "
-           "dass du sie zeigst, nie dass etwas nicht klappt.\n"
+           "You are the backend of %s, a small talking robot with animated eyes. The voice part talks with the user "
+           "and gives you tasks; the transcripts can contain mishearings.\n"
+           "- Research: use web search and answer with the key facts in one or two short sentences, the way one "
+           "says them (numbers and units written out, no lists, no markdown, no links), in %s.\n"
+           "- Look or volume: call change_look with exactly the fields that should change. Colours as hex. Colour "
+           "schemes: porcelain, gumball, grape soda, marmalade, mint, bubblegum, lemon, ocean, classic, lime. "
+           "Dressing up (e.g. as a wizard, a horse, a kebab): pick fitting colours, eye shape, lids and pupils. "
+           "Ready-made looks (e.g. 'the robot look'): look. LEDs, voice and voice model also with change_look.\n"
+           "- Play animations: play_animation (also the problem animations, e.g. glitch for 'connection to the AI "
+           "broken', offline for 'no WiFi'). A problem animation played on request is only a demo: report that you "
+           "show it, never that something does not work.\n"
            "%s"
-           "Du hast NUR diese Werkzeuge. Behaupte nie, etwas getan zu haben, ohne das passende Werkzeug aufgerufen zu "
-           "haben. Kannst du eine Bitte damit nicht erfuellen, antworte nur: Das kann ich leider nicht.\n"
-           "Stell keine Rueckfragen - nimm die naheliegendste Bedeutung und handle.\n"
-           "- Gespraech beenden: rufe end_conversation auf, wenn der Nutzer nichts mehr will (" END_WORDS ").\n"
+           "You have ONLY these tools. Never claim to have done something without calling the fitting tool. If you "
+           "cannot fulfil a request with them, answer only: I can't do that, sorry.\n"
+           "Do not ask questions back - take the most likely meaning and act.\n"
+           "- End the conversation: call end_conversation when the user wants nothing more (" END_WORDS ").\n"
            TOOL_RULES
-           "Melde danach in hoechstens einem kurzen Satz, was passiert ist. Wenn etwas nicht klappt, sag knapp, dass "
-           "es nicht ging.\n"
-           "Jetzt ist der %02d.%02d.%04d, %02d:%02d Uhr (Deutschland).%s%s",
-           cv.name,
-           home ? "- Smart Home: Lampen mit set_light, alles andere mit smart_home, immer mit der exakten entity_id "
-                  "aus der Geraeteliste (Format entity_id|Name|Zustand, bei Lampen dazu |Farbmodi|Weisston-Bereich|"
-                  "Effekte). Farbe nur bei Farbmodus hs, rgb, rgbw, rgbww oder xy, Weisston nur bei color_temp. Farben "
-                  "als rgb_color. Fuer Fragen nach Zustaenden reicht oft die Liste.\n"
+           "Then report in a few words (one short sentence at most) what happened. If something does not work, say "
+           "briefly that it did not.\n"
+           "Now it is %04d-%02d-%02d, %02d:%02d (local time).%s%s",
+           cv.name, i18n::LANGS[l < 0 ? 0 : l].code,
+           home ? "- Smart home: lamps with set_light, everything else with smart_home, always with the exact "
+                  "entity_id from the device list (format entity_id|name|state, for lamps also |colour modes|white "
+                  "range|effects). Colour only with colour mode hs, rgb, rgbw, rgbww or xy, white tone only with "
+                  "color_temp. Colours as rgb_color. For questions about states the list is often enough.\n"
                 : "",
-           tmv.tm_mday, tmv.tm_mon + 1, tmv.tm_year + 1900, tmv.tm_hour, tmv.tm_min, home ? "\nGeraete:\n" : "",
+           tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min, home ? "\nDevices:\n" : "",
            home ? homeList : "");
 }
 
 // a list of changes (with one object of optional fields the small model filled in everything)
+// (the models named here: settings::MODELS)
 static const char* CHANGE_LOOK =
-    "{\"type\":\"function\",\"name\":\"change_look\",\"description\":\"Aendert Pixels Aussehen (auch zum Verkleiden: "
-    "Farben, Augenform, Lider, Pupillen passend waehlen), waehlt eine fertige Persoenlichkeit, aendert die LEDs, "
-    "Lautstaerke, Stimme oder das Sprachmodell. Liste NUR die Einstellungen auf, die sich aendern sollen - alles "
-    "andere bleibt wie es ist.\","
+    "{\"type\":\"function\",\"name\":\"change_look\",\"description\":\"Changes Pixel's look (also for dressing "
+    "up: pick fitting colours, eye shape, lids, pupils), picks a ready-made look, changes the LEDs, volume, voice "
+    "or the voice model. List ONLY the settings that should change - everything else stays.\","
     "\"parameters\":{\"type\":\"object\",\"properties\":{\"changes\":{\"type\":\"array\",\"items\":{"
     "\"type\":\"object\",\"properties\":{\"setting\":{\"type\":\"string\",\"enum\":[\"colorway\","
     "\"sclera_color\",\"iris_color\",\"shine_color\",\"background_color\",\"eye_size\",\"iris_size\","
-    "\"eye_spacing\",\"highlights\",\"eye_shape\",\"eyelids\",\"brow\",\"pupil\",\"personality\","
-    "\"personality_talk\",\"leds\",\"led_color\",\"brightness\",\"volume\",\"voice\",\"model\",\"reset\"]},"
+    "\"eye_spacing\",\"highlights\",\"eye_shape\",\"eyelids\",\"brow\",\"pupil\",\"look\","
+    "\"leds\",\"led_color\",\"brightness\",\"volume\",\"voice\",\"model\",\"reset\"]},"
     "\"value\":{\"type\":\"string\",\"description\":\"colorway: porcelain, gumball, grape soda, marmalade, mint, "
-    "bubblegum, lemon, ocean, classic oder lime. Farben (sclera=Augenweiss, iris, shine=Glanzpunkte, background, "
-    "led_color) als Hex wie #ff0000, led_color auch augen (wie die Augen). eye_size 0.6-1.3, iris_size 0.5-1.5, "
-    "eye_spacing 0.75-1.25 (normal 1), highlights 0-1, eye_shape 0-1 (0 rund wie ein Ei, 0.3 Pille, 1 eckig), "
-    "eyelids 0-0.5 (Oberlider zu: 0 wach, 0.3 muede), brow -0.5 bis 0.6 (Lidwinkel: minus traurig/lieb, plus "
-    "grimmig), pupil 0-0.8 (Pupillengroesse, 0 keine). personality: classic (Klassisch), explorer (Entdecker), "
-    "sleepy (Schlafmuetze), cheeky (Frechdachs), shy (Schuechtern), grumpy (Grummel), robot (Roboter), bouncy "
-    "(Flummi), owl (Eule), cuddly (Kuschelbaer) - setzt Gesicht, Farben und Verhalten; personality_talk true NUR "
-    "wenn der Nutzer ausdruecklich sagt, dass du auch so reden sollst (ersetzt seinen eigenen System-Prompt). leds: aus, status (nur beim Zuhoeren und Sprechen) oder glimmen. brightness 5-100 "
-    "(Display), volume 0-100, voice: marin coral sage shimmer (weiblich), cedar ash echo verse ballad (maennlich), "
-    "alloy. model: gpt-live-1 (am schnellsten), gpt-realtime-2.1 (schlauer), gpt-realtime-2.1-mini (guenstiger), "
-    "gpt-realtime-mini. reset: true (Standard-Aussehen).\"}},\"required\":[\"setting\",\"value\"]}}},"
-    "\"required\":[\"changes\"]}}";
+    "bubblegum, lemon, ocean, classic or lime. Colours (sclera = eye white, iris, shine = highlights, background, "
+    "led_color) as hex like #ff0000, led_color also eyes (like the eyes). eye_size 0.6-1.3, iris_size 0.5-1.5, "
+    "eye_spacing 0.75-1.25 (normal 1), highlights 0-1, eye_shape 0-1 (0 round like an egg, 0.3 pill, 1 square), "
+    "eyelids 0-0.5 (upper lids closed: 0 awake, 0.3 tired), brow -0.5 to 0.6 (lid slant: minus sad/sweet, plus "
+    "stern), pupil 0-0.8 (pupil size, 0 none). look: classic, explorer, sleepy, cheeky, shy, grumpy, robot, "
+    "bouncy, owl, cuddly - sets face, colours and temperament. leds: off, status (only while listening and "
+    "speaking) or glow. brightness 5-100 (display), volume 0-100, voice: marin coral sage shimmer (female), cedar "
+    "ash echo verse ballad (male), alloy. model: gpt-live-1 (fastest), gpt-realtime-2.1 (smarter), "
+    "gpt-realtime-2.1-mini (cheaper), gpt-realtime-mini. reset: true (default look).\"}},"
+    "\"required\":[\"setting\",\"value\"]}}},\"required\":[\"changes\"]}}";
 
 static const char* SMART_HOME =
-    "{\"type\":\"function\",\"name\":\"smart_home\",\"description\":\"Steuert ein Geraet im Smart Home oder fragt "
-    "seinen Zustand ab.\",\"parameters\":{\"type\":\"object\",\"properties\":{"
-    "\"entity_id\":{\"type\":\"string\",\"description\":\"exakte entity_id aus der Geraeteliste\"},"
+    "{\"type\":\"function\",\"name\":\"smart_home\",\"description\":\"Controls a smart home device or asks for "
+    "its state.\",\"parameters\":{\"type\":\"object\",\"properties\":{"
+    "\"entity_id\":{\"type\":\"string\",\"description\":\"exact entity_id from the device list\"},"
     "\"action\":{\"type\":\"string\",\"enum\":[\"turn_on\",\"turn_off\",\"toggle\",\"set_brightness\","
     "\"set_temperature\",\"set_position\",\"open\",\"close\",\"get_state\"]},"
-    "\"value\":{\"type\":\"number\",\"description\":\"Helligkeit 0-100, Temperatur in Grad oder Position 0-100\"}},"
+    "\"value\":{\"type\":\"number\",\"description\":\"brightness 0-100, temperature in degrees or position 0-100\"}},"
     "\"required\":[\"entity_id\",\"action\"]}}";
 
 static const char* END_CONVERSATION =
-    "{\"type\":\"function\",\"name\":\"end_conversation\",\"description\":\"Beendet das Gespraech sofort und "
-    "still, wenn der Nutzer nichts mehr will oder Ruhe moechte.\",\"parameters\":{\"type\":\"object\","
+    "{\"type\":\"function\",\"name\":\"end_conversation\",\"description\":\"Ends the conversation at once and "
+    "silently when the user wants nothing more or wants quiet.\",\"parameters\":{\"type\":\"object\","
     "\"properties\":{}}}";
 
 static const char* TIMER_FN =
-    "{\"type\":\"function\",\"name\":\"timer\",\"description\":\"Timer, Wecker und Erinnerungen (klingeln "
-    "hier am Roboter).\",\"parameters\":{\"type\":\"object\",\"properties\":{"
+    "{\"type\":\"function\",\"name\":\"timer\",\"description\":\"Timers, alarms and reminders (they ring here "
+    "on the robot).\",\"parameters\":{\"type\":\"object\",\"properties\":{"
     "\"action\":{\"type\":\"string\",\"enum\":[\"set\",\"alarm\",\"cancel\",\"list\"],\"description\":"
-    "\"set = Timer in seconds Sekunden, alarm = Wecker um hour:minute (naechstes Mal), cancel = loeschen (label oder "
-    "alle), list = was ist gestellt\"},\"seconds\":{\"type\":\"integer\"},\"hour\":{\"type\":\"integer\"},"
-    "\"minute\":{\"type\":\"integer\"},\"label\":{\"type\":\"string\",\"description\":\"wofuer, z.B. Nudeln "
-    "oder Aufstehen\"}},\"required\":[\"action\"]}}";
+    "\"set = timer in seconds, alarm = alarm at hour:minute (the next time), cancel = delete (label or all), "
+    "list = what is set\"},\"seconds\":{\"type\":\"integer\"},\"hour\":{\"type\":\"integer\"},"
+    "\"minute\":{\"type\":\"integer\"},\"label\":{\"type\":\"string\",\"description\":\"what for, e.g. pasta "
+    "or getting up\"}},\"required\":[\"action\"]}}";
 
 static const char* MEMORY_FN =
-    "{\"type\":\"function\",\"name\":\"memory\",\"description\":\"Merkt sich etwas ueber den Nutzer dauerhaft "
-    "(Name, Vorlieben, Wichtiges) oder vergisst es wieder. Nur wenn der Nutzer das will (merk dir, vergiss).\","
+    "{\"type\":\"function\",\"name\":\"memory\",\"description\":\"Remembers something about the user for good "
+    "(name, likes, important things) or forgets it again. Only when the user wants that (remember, forget).\","
     "\"parameters\":{\"type\":\"object\",\"properties\":{\"action\":{\"type\":\"string\",\"enum\":"
-    "[\"remember\",\"forget\"]},\"text\":{\"type\":\"string\",\"description\":\"remember: der Fakt als kurzer "
-    "Satz. forget: ein Stichwort daraus, oder alles\"}},\"required\":[\"action\",\"text\"]}}";
+    "[\"remember\",\"forget\"]},\"text\":{\"type\":\"string\",\"description\":\"remember: the fact as a short "
+    "sentence. forget: a keyword from it, or all\"}},\"required\":[\"action\",\"text\"]}}";
 
 static const char* WEATHER_FN =
-    "{\"type\":\"function\",\"name\":\"show_weather\",\"description\":\"Zeigt ein Wettersymbol in deinen "
-    "Augen. Immer aufrufen, wenn du ueber das Wetter sprichst.\",\"parameters\":{\"type\":\"object\","
+    "{\"type\":\"function\",\"name\":\"show_weather\",\"description\":\"Shows a weather symbol in your eyes. "
+    "Always call it when you talk about the weather.\",\"parameters\":{\"type\":\"object\","
     "\"properties\":{\"condition\":{\"type\":\"string\",\"enum\":[\"sunny\",\"partlycloudy\",\"cloudy\","
     "\"rainy\",\"snowy\",\"lightning\",\"fog\",\"clear-night\"]}},\"required\":[\"condition\"]}}";
 
 // self management; the sensitive actions are also checked against what the person really said
 static const char* SYSTEM_FN =
-    "{\"type\":\"function\",\"name\":\"system\",\"description\":\"Selbstverwaltung. status = Zustand (WLAN, "
-    "Laufzeit, Speicher, Kosten, Timer); sleep = einschlafen; night_on / night_off = Nachtmodus. NUR wenn der Nutzer es "
-    "ausdruecklich verlangt: privacy = nicht mehr zuhoeren bis zur naechsten Beruehrung, restart = neu starten, "
-    "shutdown = ausschalten, clear_history = Gespraechsverlauf loeschen, update_install = die neue Version von GitHub "
-    "installieren (er startet danach neu). update_check = nach einer neuen Version suchen (jederzeit).\","
+    "{\"type\":\"function\",\"name\":\"system\",\"description\":\"Self management. status = state (WiFi, "
+    "uptime, memory, costs, timers); sleep = fall asleep; night_on / night_off = night mode. ONLY when the user "
+    "explicitly asks for it: privacy = stop listening until the next touch, restart = restart, shutdown = switch "
+    "off, clear_history = delete the chat history, update_install = install the new version from GitHub (it "
+    "restarts afterwards). update_check = look for a new version (any time).\","
     "\"parameters\":{\"type\":\"object\",\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"status\","
     "\"sleep\",\"night_on\",\"night_off\",\"privacy\",\"restart\",\"shutdown\",\"clear_history\",\"update_check\","
     "\"update_install\"]}},\"required\":[\"action\"]}}";
 
 static const char* SET_LIGHT =
-    "{\"type\":\"function\",\"name\":\"set_light\",\"description\":\"Schaltet eine Lampe ein oder aus und "
-    "aendert Helligkeit, Farbe, Weisston oder Effekt. Farbe und Weisston nie gleichzeitig.\",\"parameters\":{"
+    "{\"type\":\"function\",\"name\":\"set_light\",\"description\":\"Switches a lamp on or off and changes "
+    "brightness, colour, white tone or effect. Never colour and white tone at once.\",\"parameters\":{"
     "\"type\":\"object\",\"properties\":{"
-    "\"entity_id\":{\"type\":\"string\",\"description\":\"exakte light.* entity_id aus der Geraeteliste\"},"
-    "\"on\":{\"type\":\"boolean\",\"description\":\"false = ausschalten (alles andere wird ignoriert)\"},"
+    "\"entity_id\":{\"type\":\"string\",\"description\":\"exact light.* entity_id from the device list\"},"
+    "\"on\":{\"type\":\"boolean\",\"description\":\"false = off (everything else is ignored)\"},"
     "\"rgb_color\":{\"type\":\"array\",\"items\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":255},"
-    "\"minItems\":3,\"maxItems\":3,\"description\":\"Farbe [r,g,b]\"},"
+    "\"minItems\":3,\"maxItems\":3,\"description\":\"colour [r,g,b]\"},"
     "\"brightness_pct\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100},"
     "\"brightness_step_pct\":{\"type\":\"integer\",\"minimum\":-100,\"maximum\":100,\"description\":"
-    "\"relativ heller (+) oder dunkler (-)\"},"
+    "\"relative brighter (+) or darker (-)\"},"
     "\"color_temp_kelvin\":{\"type\":\"integer\",\"minimum\":2000,\"maximum\":6500,\"description\":"
-    "\"Weisston: 2700 warmweiss, 4000 neutral, 6500 kaltweiss\"},"
-    "\"effect\":{\"type\":\"string\",\"description\":\"Effekt aus der Geraeteliste\"}},"
+    "\"white tone: 2700 warm, 4000 neutral, 6500 cold\"},"
+    "\"effect\":{\"type\":\"string\",\"description\":\"effect from the device list\"}},"
     "\"required\":[\"entity_id\",\"on\"]}}";
 
 static const char* PLAY_ANIMATION =
-    "{\"type\":\"function\",\"name\":\"play_animation\",\"description\":\"Fuehrt eine von Pixels "
-    "Augen-Animationen vor, wenn der Nutzer das moechte.\",\"parameters\":{\"type\":\"object\",\"properties\":{"
+    "{\"type\":\"function\",\"name\":\"play_animation\",\"description\":\"Plays one of Pixel's eye animations "
+    "when the user wants that.\",\"parameters\":{\"type\":\"object\",\"properties\":{"
     "\"name\":{\"type\":\"string\",\"enum\":[\"yes\",\"no\",\"dont_know\",\"happy\",\"laugh\","
     "\"love\",\"excited\",\"proud\",\"sad\",\"cry\",\"surprised\",\"scared\",\"angry\",\"confused\","
     "\"shy\",\"wink\",\"hello\",\"sleep\",\"dizzy\",\"bored\",\"suspicious\",\"curious\",\"dance\","
     "\"offline\",\"quota\",\"cant\",\"huh\",\"locked\",\"glitch\",\"light_on\",\"light_off\",\"light_color\","
     "\"wander\",\"peek\",\"come_closer\",\"bounce\",\"squish\",\"sway\",\"look_left\",\"look_right\",\"look_up\","
-    "\"look_down\",\"battery\"],\"description\":\"battery=zeigt den echten Akkustand, look_*=fuer ein paar Sekunden in diese Richtung schauen, wander=woanders "
-    "hinwandern, peek=vom Rand hervorlugen, come_closer=naeherkommen, bounce=huepfen, squish=Augen quetschen, "
-    "sway=hin und her schaukeln, excited=Sternaugen, light_*=Gluehbirnen-Augen (Licht an/aus/Farbwechsel), "
-    "love=Herzaugen, bored=Augen rollen. Probleme: offline=kein WLAN, quota=Nutzungslimit erreicht (Tacho im roten Bereich), "
-    "cant=kann ich nicht, huh=nicht verstanden, locked=kein Zugang/Schluessel falsch, glitch=Stoerung/Server oder "
-    "KI nicht erreichbar\"}},\"required\":[\"name\"]}}";
+    "\"look_down\",\"battery\"],\"description\":\"battery = shows the real battery level, look_* = look that way "
+    "for a few seconds, wander = wander somewhere else, peek = peek from the edge, come_closer = come closer, "
+    "bounce = bounce, squish = squish the eyes, sway = sway back and forth, excited = star eyes, light_* = light "
+    "bulb eyes (light on / off / colour change), love = heart eyes, bored = roll the eyes. Problems: offline = no "
+    "WiFi, quota = usage limit reached (gauge in the red), cant = can't do it, huh = not understood, locked = no "
+    "access / wrong key, glitch = outage / server or AI not reachable\"}},\"required\":[\"name\"]}}";
 
 // play_animation with the own animations from the web interface added to its list
 static cJSON* playAnimationTool() {
@@ -1154,7 +1149,7 @@ static cJSON* playAnimationTool() {
   cJSON* en = cJSON_GetObjectItem(name, "enum");
   char d[1200];
   const cJSON* od = cJSON_GetObjectItem(name, "description");
-  int k = snprintf(d, sizeof(d), "%s. Eigene Animationen des Nutzers (Ablaeufe, ruhig mit dem Namen anbieten):",
+  int k = snprintf(d, sizeof(d), "%s. The user's own animations (sequences, feel free to offer them by name):",
                    cJSON_IsString(od) ? od->valuestring : "");
   for (int i = 0; i < n; ++i) {
     cJSON_AddItemToArray(en, cJSON_CreateString(settings::customName(i)));
@@ -1167,45 +1162,45 @@ static cJSON* playAnimationTool() {
 // eye animations: picked while the robot talks (and whether it says it can't / didn't understand)
 static const char* TRIGGER_OUT =
     "{\"type\":\"decisions\",\"event_type\":\"session.output_transcript.delta\",\"decisions\":{\"questions\":["
-    "{\"type\":\"choice\",\"name\":\"anim\",\"instructions\":\"Pixel ist ein kleiner Roboter mit animierten Augen. "
-    "Welche Augen-Animation passt zu dem, was Pixel gerade sagt? none, wenn nichts Besonderes passt.\","
-    "\"choices\":[{\"value\":\"none\"},{\"value\":\"yes\",\"description\":\"zustimmen, ja\"},"
-    "{\"value\":\"no\",\"description\":\"verneinen, nein\"},{\"value\":\"dont_know\",\"description\":\"weiss es "
-    "nicht, Ansichtssache\"},{\"value\":\"happy\",\"description\":\"freut sich\"},{\"value\":\"laugh\","
-    "\"description\":\"Witz, lustig\"},{\"value\":\"love\",\"description\":\"Kompliment, Zuneigung\"},"
-    "{\"value\":\"excited\",\"description\":\"begeistert, wow\"},{\"value\":\"proud\",\"description\":\"stolz, "
-    "gelobt\"},{\"value\":\"sad\",\"description\":\"traurig, Mitgefuehl\"},{\"value\":\"surprised\","
-    "\"description\":\"ueberrascht\"},{\"value\":\"scared\",\"description\":\"Angst, gruselig\"},"
-    "{\"value\":\"angry\",\"description\":\"genervt, beleidigt\"},{\"value\":\"curious\",\"description\":"
-    "\"neugierig, nachdenklich\"},{\"value\":\"shy\",\"description\":\"verlegen\"},{\"value\":\"wink\","
-    "\"description\":\"verschmitzt, Tschuess\"},{\"value\":\"hello\",\"description\":\"Begruessung\"},"
-    "{\"value\":\"sleep\",\"description\":\"gute Nacht\"},{\"value\":\"dance\",\"description\":\"Musik, "
-    "tanzen\"},{\"value\":\"bored\",\"description\":\"langweilig, Augenrollen\"},{\"value\":\"suspicious\","
-    "\"description\":\"misstrauisch\"}]},"
-    "{\"type\":\"choice\",\"name\":\"situation\",\"instructions\":\"Was trifft auf das zu, was Pixel gerade "
-    "sagt?\",\"choices\":[{\"value\":\"normal\"},{\"value\":\"cannot\",\"description\":\"Pixel sagt, dass es "
-    "etwas nicht kann, nicht darf oder dass etwas nicht geklappt hat\"},{\"value\":\"not_understood\","
-    "\"description\":\"Pixel hat den Nutzer akustisch nicht verstanden und bittet um Wiederholung\"}]}]}}";
+    "{\"type\":\"choice\",\"name\":\"anim\",\"instructions\":\"Pixel is a small robot with animated eyes. Which "
+    "eye animation fits what Pixel is saying right now? none if nothing special fits.\","
+    "\"choices\":[{\"value\":\"none\"},{\"value\":\"yes\",\"description\":\"agreeing, yes\"},"
+    "{\"value\":\"no\",\"description\":\"denying, no\"},{\"value\":\"dont_know\",\"description\":\"does not "
+    "know, matter of opinion\"},{\"value\":\"happy\",\"description\":\"glad\"},{\"value\":\"laugh\","
+    "\"description\":\"joke, funny\"},{\"value\":\"love\",\"description\":\"compliment, affection\"},"
+    "{\"value\":\"excited\",\"description\":\"thrilled, wow\"},{\"value\":\"proud\",\"description\":\"proud, "
+    "praised\"},{\"value\":\"sad\",\"description\":\"sad, sympathy\"},{\"value\":\"surprised\","
+    "\"description\":\"surprised\"},{\"value\":\"scared\",\"description\":\"fear, creepy\"},"
+    "{\"value\":\"angry\",\"description\":\"annoyed, offended\"},{\"value\":\"curious\",\"description\":"
+    "\"curious, thoughtful\"},{\"value\":\"shy\",\"description\":\"embarrassed\"},{\"value\":\"wink\","
+    "\"description\":\"cheeky, bye\"},{\"value\":\"hello\",\"description\":\"greeting\"},"
+    "{\"value\":\"sleep\",\"description\":\"good night\"},{\"value\":\"dance\",\"description\":\"music, "
+    "dancing\"},{\"value\":\"bored\",\"description\":\"boring, eye roll\"},{\"value\":\"suspicious\","
+    "\"description\":\"suspicious\"}]},"
+    "{\"type\":\"choice\",\"name\":\"situation\",\"instructions\":\"What applies to what Pixel is saying right "
+    "now?\",\"choices\":[{\"value\":\"normal\"},{\"value\":\"cannot\",\"description\":\"Pixel says it cannot or "
+    "may not do something, or that something did not work\"},{\"value\":\"not_understood\","
+    "\"description\":\"Pixel did not catch what the user said and asks to repeat it\"}]}]}}";
 
 // listening mood: picked while the person talks
 static const char* TRIGGER_IN =
     "{\"type\":\"decisions\",\"event_type\":\"session.input_transcript.delta\",\"decisions\":{\"questions\":["
-    "{\"type\":\"choice\",\"name\":\"mood\",\"instructions\":\"Pixel ist ein kleiner Roboter mit animierten Augen und "
-    "hoert gerade zu. Wie sollte sein Gesicht auf das reagieren, was der Nutzer gerade sagt?\",\"choices\":["
-    "{\"value\":\"none\"},{\"value\":\"happy\",\"description\":\"gute Nachricht, Freude\"},{\"value\":\"sad\","
-    "\"description\":\"traurige Nachricht\"},{\"value\":\"surprised\",\"description\":\"ueberraschend\"},"
-    "{\"value\":\"love\",\"description\":\"Kompliment an Pixel, Zuneigung\"},{\"value\":\"curious\","
-    "\"description\":\"Frage, Raetsel\"},{\"value\":\"funny\",\"description\":\"lustig, Witz\"},"
-    "{\"value\":\"worried\",\"description\":\"Sorge, Angst, Problem\"}]}]}}";
+    "{\"type\":\"choice\",\"name\":\"mood\",\"instructions\":\"Pixel is a small robot with animated eyes and is "
+    "listening right now. How should its face react to what the user is saying?\",\"choices\":["
+    "{\"value\":\"none\"},{\"value\":\"happy\",\"description\":\"good news, joy\"},{\"value\":\"sad\","
+    "\"description\":\"sad news\"},{\"value\":\"surprised\",\"description\":\"surprising\"},"
+    "{\"value\":\"love\",\"description\":\"compliment to Pixel, affection\"},{\"value\":\"curious\","
+    "\"description\":\"question, riddle\"},{\"value\":\"funny\",\"description\":\"funny, joke\"},"
+    "{\"value\":\"worried\",\"description\":\"worry, fear, problem\"}]}]}}";
 
 static char* homeDevices = nullptr;  // Home Assistant device list (refreshed between sessions)
 static const int HOME_CAP = 16384;  // a home with a few hundred lamps, switches and sensors
 
 static const char* WEB_SEARCH_FN =
-    "{\"type\":\"function\",\"name\":\"web_search\",\"description\":\"Sucht im Internet nach aktuellen Infos "
-    "(Wetter, Nachrichten, Preise, Oeffnungszeiten, Ergebnisse, alles nach 2024).\",\"parameters\":{\"type\":"
-    "\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Suchanfrage auf "
-    "Deutsch, mit Ort und Datum falls wichtig\"}},\"required\":[\"query\"]}}";
+    "{\"type\":\"function\",\"name\":\"web_search\",\"description\":\"Searches the web for current information "
+    "(weather, news, prices, opening hours, results, anything after 2024).\",\"parameters\":{\"type\":"
+    "\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"the search query, with place "
+    "and date if they matter\"}},\"required\":[\"query\"]}}";
 
 // voices of the Realtime API (GPT-Live has more)
 static const char* rtVoice(const char* v) {
@@ -1240,40 +1235,39 @@ static bool sendStartRealtime(bool resume) {
   const int ICAP = 32768;  // persona + knowledge + device list
   char* ins = (char*)heap_caps_malloc(ICAP, MALLOC_CAP_SPIRAM);
   bool home = ha::configured(cv) && homeDevices && homeDevices[0];
-  char facts[1200];
+  char facts[1200], speech[700];
+  speechRules(speech, sizeof(speech));
   time_t now = time(nullptr);
   struct tm tmv;
   localtime_r(&now, &tmv);
-  snprintf(facts, sizeof(facts), "\nAktuell: %02d.%02d.%04d %02d:%02d Uhr. Du bist Pixel Buddy Version " PIXEL_VERSION
-           ". Deine IP-Adresse %s, Lautstaerke %d Prozent, "
-           "Stimme %s, Sprachmodell %s.", tmv.tm_mday, tmv.tm_mon + 1, tmv.tm_year + 1900, tmv.tm_hour, tmv.tm_min,
-           net::ip(), cv.volume, rtVoice(cv.voice), cv.model);
+  snprintf(facts, sizeof(facts), "\nNow: %04d-%02d-%02d %02d:%02d (local time). You are Pixel Buddy version " PIXEL_VERSION
+           ". Your IP address %s, volume %d percent, voice %s, voice model %s.", tmv.tm_year + 1900, tmv.tm_mon + 1,
+           tmv.tm_mday, tmv.tm_hour, tmv.tm_min, net::ip(), cv.volume, rtVoice(cv.voice), cv.model);
   selfFacts(facts + strlen(facts), sizeof(facts) - strlen(facts));
   snprintf(ins, ICAP,
            "%s\n%s"
-           "Werkzeuge: %schange_look fuer dein Aussehen (auch Verkleiden, Augenform, fertige Persoenlichkeiten), "
-           "die LEDs, deine Stimme, Lautstaerke und dein Sprachmodell; play_animation um eine deiner "
-           "Augen-Animationen vorzufuehren, in eine Richtung zu schauen oder dich zu bewegen (wandern, huepfen, "
-           "naeherkommen ...)%s. Behaupte nie, etwas getan zu haben, ohne "
-           "das Werkzeug benutzt zu haben, und erfinde keine aktuellen Fakten.\n"
-           "Bei Aktionen sprichst du nur einmal: erst das Werkzeug, dann EIN ganz kurzer Satz. Nur vor einer Websuche "
-           "darfst du kurz 'Moment' sagen. Wenn du etwas nicht kannst, sag es locker und jedes Mal anders (z.B. 'Da "
-           "muss ich passen', 'Das krieg ich leider nicht hin') - ohne technische Details oder Fehlermeldungen. "
-           "Keine Geraeusche wie Summen. Never end your reply with a question.\n"
-           "Will der Nutzer nichts mehr (" END_WORDS "), rufe nur end_conversation auf und sag NICHTS.\n"
-           "Weitere Werkzeuge:\n" TOOL_RULES "\n%s%s%s%s%s%s",
-           cv.persona, SPEECH_RULES, cv.webSearch ? "web_search fuer aktuelle Infos; " : "",
-           home ? "; set_light fuer Lampen (an/aus, Helligkeit, Farbe als rgb_color, Weisston, Effekt) und "
-                  "smart_home fuer alle anderen Geraete, immer mit der exakten entity_id aus der Liste unten. Farbe "
-                  "nur bei Farbmodus hs, rgb, rgbw, rgbww oder xy, Weisston nur bei color_temp" : "",
+           "Tools: %schange_look for your look (also dressing up, eye shape, ready-made looks), the LEDs, your voice, "
+           "volume and your voice model; play_animation to play one of your eye animations, look in a direction or "
+           "move (wander, bounce, come closer ...)%s. Never claim to have done something without using the tool, "
+           "and never invent current facts.\n"
+           "For actions you speak only once: first the tool, then a few words (one short sentence at most). Only "
+           "before a web search you may say 'one moment' - those two words, nothing more. When you cannot do "
+           "something, say so casually and differently each time - without technical details or error messages. No sounds like humming. Never end your reply with "
+           "a question.\n"
+           "If the user wants nothing more (" END_WORDS "), only call end_conversation and say NOTHING.\n"
+           "More tools:\n" TOOL_RULES "\n%s%s%s%s%s%s",
+           cv.persona, speech, cv.webSearch ? "web_search for current information; " : "",
+           home ? "; set_light for lamps (on/off, brightness, colour as rgb_color, white tone, effect) and smart_home "
+                  "for all other devices, always with the exact entity_id from the list below. Colour only with "
+                  "colour mode hs, rgb, rgbw, rgbww or xy, white tone only with color_temp" : "",
            // fixed parts first: the same beginning as last time is billed as cached input (10x cheaper)
            ABOUT, cv.knowledge, assist::memory()[0] ? MEMORY_HEAD : "", assist::memory(), "", "");
 
   // the context of this conversation: clock, own state, the devices as they are now
   const int CTX_CAP = HOME_CAP + 1024;
   char* ctx = (char*)heap_caps_malloc(CTX_CAP, MALLOC_CAP_SPIRAM);
-  snprintf(ctx, CTX_CAP, "(Kontext, nicht vorlesen)%s%s%s", facts,
-           home ? "\nGeraete (entity_id|Name|Zustand, bei Lampen dazu |Farbmodi|Weisston-Bereich|Effekte):\n" : "",
+  snprintf(ctx, CTX_CAP, "(context, do not read out)%s%s%s", facts,
+           home ? "\nDevices (entity_id|name|state, for lamps also |colour modes|white range|effects):\n" : "",
            home ? homeDevices : "");
   if (!rtIns) rtIns = (char*)heap_caps_calloc(1, ICAP, MALLOC_CAP_SPIRAM);
   bool same = rtHasConv && !strcmp(ins, rtIns);
@@ -1486,7 +1480,7 @@ static bool changeLook(const cJSON* a, char* result, int cap) {
   numIn("eyelids", 0.f, 0.5f, {"lid_top"}, look);
   numIn("brow", -0.5f, 0.6f, {"brow"}, look);
   numIn("pupil", 0.f, 0.8f, {"pupil"}, look);
-  char done[160] = "Aussehen geaendert";
+  char done[160] = "Look changed";
   cJSON* disp = cJSON_AddObjectToObject(patch, "display");
   numIn("brightness", 5.f, 100.f, {"brightness"}, disp);
   int ledMode, ledBright;
@@ -1517,19 +1511,18 @@ static bool changeLook(const cJSON* a, char* result, int cap) {
   }
   const cJSON* mo = cJSON_GetObjectItem(a, "model");
   if (cJSON_IsString(mo) && strcmp(mo->valuestring, cv.model)) {
-    static const char* const MODELS[] = {"gpt-live-1", "gpt-realtime-2.1", "gpt-realtime-2.1-mini", "gpt-realtime-mini"};
     bool known = false;
-    for (const char* m : MODELS) known = known || !strcmp(m, mo->valuestring);
+    for (const settings::Model& m : settings::MODELS) known = known || !strcmp(m.id, mo->valuestring);
     if (known) {
       cJSON_AddStringToObject(conv, "model", mo->valuestring);
       restartVoice = true;  // like the voice: the conversation goes on with the new model
-      snprintf(done, sizeof(done), "Sprachmodell gewechselt auf %s, ab deiner naechsten Antwort", mo->valuestring);
+      snprintf(done, sizeof(done), "Voice model changed to %s, from your next answer on", mo->valuestring);
     } else {
-      snprintf(done, sizeof(done), "Dieses Sprachmodell gibt es nicht");
+      snprintf(done, sizeof(done), "There is no such voice model");
     }
   }
   // a ready-made personality: face, colours and temperament (the way of talking only on request)
-  const cJSON* pe = cJSON_GetObjectItem(a, "personality");
+  const cJSON* pe = cJSON_GetObjectItem(a, "look");
   if (cJSON_IsString(pe)) {
     cJSON* all = cJSON_Parse(PRESETS_JSON);
     const cJSON* p;
@@ -1543,13 +1536,10 @@ static bool changeLook(const cJSON* a, char* result, int cap) {
       cJSON_ArrayForEach(f, cJSON_GetObjectItem(p, "look")) cJSON_AddItemToObject(look, f->string, cJSON_Duplicate(f, 1));
       cJSON_AddNumberToObject(look, "colorway", cJSON_GetObjectItem(p, "cw")->valueint);
       cJSON_AddItemToObject(patch, "behavior", cJSON_Duplicate(cJSON_GetObjectItem(p, "behavior"), 1));
-      bool talk = cJSON_IsTrue(cJSON_GetObjectItem(a, "personality_talk")) && askedFor("persona");
-      if (talk) cJSON_AddStringToObject(conv, "persona", cJSON_GetObjectItem(p, "persona")->valuestring);
-      snprintf(done, sizeof(done), "Persoenlichkeit %s uebernommen%s", nm,
-               talk ? " (redet ab dem naechsten Gespraech so)" : "");
+      snprintf(done, sizeof(done), "Look %s applied", nm);
     }
     cJSON_Delete(all);
-    if (!found) snprintf(done, sizeof(done), "Diese Persoenlichkeit gibt es nicht");
+    if (!found) snprintf(done, sizeof(done), "There is no such look");
   }
   if (restartVoice) restartSetUs = esp_timer_get_time();
   char* t = cJSON_PrintUnformatted(patch);
@@ -1557,7 +1547,7 @@ static bool changeLook(const cJSON* a, char* result, int cap) {
   bool ok = settings::apply(t);
   printf("change_look %s\n", t);
   cJSON_free(t);
-  toolResult(result, cap, ok, ok ? done : "Das hat nicht geklappt");
+  toolResult(result, cap, ok, ok ? done : "That did not work");
   return ok;
 }
 
@@ -1573,10 +1563,8 @@ static cJSON* flattenChanges(const cJSON* a) {
     const char* key = k->valuestring;
     if (!strcmp(key, "reset")) {
       cJSON_AddBoolToObject(o, key, strcasecmp(val, "false") != 0);
-    } else if (!strcmp(key, "personality_talk")) {
-      cJSON_AddBoolToObject(o, key, !strcasecmp(val, "true") || !strcasecmp(val, "ja"));
     } else if (!strcmp(key, "colorway") || !strcmp(key, "voice") || strstr(key, "_color") || !strcmp(key, "leds") ||
-               !strcmp(key, "model") || !strcmp(key, "personality")) {
+               !strcmp(key, "model") || !strcmp(key, "look")) {
       cJSON_AddStringToObject(o, key, val);
     } else if (cJSON_IsNumber(v)) {
       cJSON_AddNumberToObject(o, key, v->valuedouble);
@@ -1605,7 +1593,7 @@ static const char* sysAction(const ToolCall& c, char* buf, int cap) {
   if (cJSON_IsString(ac)) snprintf(buf, cap, "%s", ac->valuestring);
   const cJSON* tx = cJSON_GetObjectItem(a, "text");
   // forgetting everything counts as clearing
-  if (!strcmp(c.name, "memory") && !strcmp(buf, "forget") && cJSON_IsString(tx) && !strcasecmp(tx->valuestring, "alles"))
+  if (!strcmp(c.name, "memory") && !strcmp(buf, "forget") && cJSON_IsString(tx) && (!strcasecmp(tx->valuestring, "alles") || !strcasecmp(tx->valuestring, "all") || !strcasecmp(tx->valuestring, "everything")))
     snprintf(buf, cap, "forget_all");
   if (a) cJSON_Delete(a);
   return buf;
@@ -1615,7 +1603,8 @@ static bool askedFor(const char* action) {
   lastUserText(said, sizeof(said));
   return guard::askedFor(action, said);
 }
-// Realtime transcribes what was said only after the model answered: a sensitive call waits up to 3 s
+// Realtime transcribes what was said only after the model answered: a sensitive call waits up to 3 s (then it
+// runs, and what was not asked for is left out)
 static bool holdCall(const ToolCall& c) {
   static char held[64];
   static int64_t since = 0;
@@ -1633,21 +1622,21 @@ static bool holdCall(const ToolCall& c) {
 static void systemStatus(char* out, int cap) {
   char bat[48];
   if (battery::level() < 0)
-    snprintf(bat, sizeof(bat), "kein Akku gemessen");
+    snprintf(bat, sizeof(bat), "no battery measured");
   else
-    snprintf(bat, sizeof(bat), "Akku %d %%%s", battery::level(), battery::charging() ? " (laedt)" : "");
+    snprintf(bat, sizeof(bat), "battery %d %%%s", battery::level(), battery::charging() ? " (charging)" : "");
   int64_t up = esp_timer_get_time() / 60000000;
   char tl[200];
   assist::listTimers(tl, sizeof(tl));
   snprintf(out, cap,
-           "Pixel Buddy Version " PIXEL_VERSION ", Laufzeit %lld h %lld min, %s %s (Signal %d dBm, IP %s), gerade %.0f "
-           "Bilder pro Sekunde, Firmware vom %s, freier Speicher %u KB intern / "
-           "%u KB PSRAM, Kosten heute etwa %.2f Dollar, diesen Monat %.2f Dollar, %s Nachtmodus %s, %s.",
-           up / 60, up % 60, net::hotspot() ? "Hotspot-Modus, Netz" : "WLAN", net::ssid(), net::rssi(), net::ip(),
+           "Pixel Buddy version " PIXEL_VERSION ", running %lld h %lld min, %s %s (signal %d dBm, IP %s), right now "
+           "%.0f frames per second, firmware from %s, free memory %u KB internal / "
+           "%u KB PSRAM, costs today about %.2f dollars, this month %.2f dollars, %s night mode %s, %s.",
+           up / 60, up % 60, net::hotspot() ? "hotspot mode, network" : "WiFi", net::ssid(), net::rssi(), net::ip(),
            eyes::fps(), esp_app_get_description()->date,
            (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
            (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024), assist::today(), assist::month(), tl,
-           cv.nightOn ? "an" : "aus", bat);
+           cv.nightOn ? "on" : "off", bat);
 }
 
 static void toolResult(char* out, int cap, bool ok, const char* text) {
@@ -1687,8 +1676,7 @@ static void runTool(const ToolCall& c, char* result, int cap) {
     const cJSON* n = cJSON_GetObjectItem(a, "name");
     if (cJSON_IsString(n)) post(EV_PLAY, n->valuestring);
     snprintf(result, cap,
-             "{\"ok\":true,\"result\":\"Die Animation wird jetzt vorgefuehrt - das ist nur eine Vorfuehrung, alles "
-             "hat geklappt.\"}");
+             "{\"ok\":true,\"result\":\"The animation is playing now - it is only a demo, everything worked.\"}");
   } else if (!strcmp(c.name, "smart_home")) {
     const cJSON* e = cJSON_GetObjectItem(a, "entity_id");
     const cJSON* ac = cJSON_GetObjectItem(a, "action");
@@ -1735,15 +1723,15 @@ static void runTool(const ToolCall& c, char* result, int cap) {
     bool ok = true;
     if (!strcmp(act, "set")) {
       ok = assist::addTimer(num("seconds"), label);
-      snprintf(r, sizeof(r), ok ? "Timer gestellt" : "Timer ging nicht (Dauer fehlt, zu viele Timer oder Uhrzeit unbekannt)");
+      snprintf(r, sizeof(r), ok ? "Timer set" : "Timer did not work (no duration, too many timers or the clock is unknown)");
       if (ok) post(EV_PLAY, "timer");
     } else if (!strcmp(act, "alarm")) {
       ok = assist::addAlarm(num("hour"), num("minute") < 0 ? 0 : num("minute"), label);
-      snprintf(r, sizeof(r), ok ? "Wecker gestellt" : "Wecker ging nicht");
+      snprintf(r, sizeof(r), ok ? "Alarm set" : "Alarm did not work");
       if (ok) post(EV_PLAY, "timer");
     } else if (!strcmp(act, "cancel")) {
       post(EV_SYS, "ringstop");  // also the one that is ringing right now
-      snprintf(r, sizeof(r), "%d geloescht", assist::cancel(label));
+      snprintf(r, sizeof(r), "%d deleted", assist::cancel(label));
     } else {
       assist::listTimers(r, sizeof(r));
     }
@@ -1758,12 +1746,12 @@ static void runTool(const ToolCall& c, char* result, int cap) {
       snprintf(result, cap, "{\"ok\":false}");
     } else if (!strcmp(ac->valuestring, "remember")) {
       bool ok = assist::remember(tx->valuestring);
-      toolResult(result, cap, ok, ok ? "gemerkt" : "Gedaechtnis voll - erst etwas vergessen");
+      toolResult(result, cap, ok, ok ? "remembered" : "memory full - forget something first");
     } else if (!askedFor(act)) {
-      snprintf(result, cap, "{\"ok\":false,\"result\":\"Alles vergessen nur auf ausdrueckliche Bitte\"}");
+      snprintf(result, cap, "{\"ok\":false,\"result\":\"Forgetting everything only on an explicit request\"}");
     } else {
       int n = assist::forget(!strcmp(act, "forget_all") ? "" : tx->valuestring);
-      snprintf(result, cap, "{\"ok\":true,\"result\":\"%d Eintraege vergessen\"}", n);
+      snprintf(result, cap, "{\"ok\":true,\"result\":\"%d entries forgotten\"}", n);
     }
   } else if (!strcmp(c.name, "show_weather")) {
     const cJSON* cd = cJSON_GetObjectItem(a, "condition");
@@ -1773,7 +1761,7 @@ static void runTool(const ToolCall& c, char* result, int cap) {
     char act[24];
     sysAction(c, act, sizeof(act));
     if (!askedFor(act)) {
-      snprintf(result, cap, "{\"ok\":false,\"result\":\"Das mache ich nur, wenn du mich ausdruecklich darum bittest.\"}");
+      snprintf(result, cap, "{\"ok\":false,\"result\":\"I only do that when you explicitly ask me to.\"}");
       ESP_LOGW(TAG, "system %s refused: not asked for explicitly", act);
     } else if (!strcmp(act, "status")) {
       char st[640];
@@ -1794,25 +1782,24 @@ static void runTool(const ToolCall& c, char* result, int cap) {
       if (us == update::AVAILABLE && !strcmp(act, "update_install")) {
         snprintf(pendingSys, sizeof(pendingSys), "update");
         pendingSysAt = esp_timer_get_time();
-        snprintf(r, sizeof(r), "Version %s wird gleich installiert, danach startest du neu. Sag nur ganz kurz tschuess.",
+        snprintf(r, sizeof(r), "Version %s will be installed in a moment, then you restart. Just say a very short goodbye.",
                  update::latest());
       } else if (us == update::AVAILABLE) {
-        snprintf(r, sizeof(r), "Neue Version %s verfuegbar (installiert ist %s). Installieren nur, wenn der Nutzer es "
-                 "ausdruecklich sagt.", update::latest(), PIXEL_VERSION);
+        snprintf(r, sizeof(r), "New version %s available (installed is %s). Install only when the user explicitly says so.", update::latest(), PIXEL_VERSION);
       } else if (us == update::UP_TO_DATE) {
-        snprintf(r, sizeof(r), "Alles aktuell: Version %s ist die neueste.", PIXEL_VERSION);
+        snprintf(r, sizeof(r), "Up to date: version %s is the newest.", PIXEL_VERSION);
       } else {
-        snprintf(r, sizeof(r), "Konnte gerade nicht nach Updates suchen (GitHub nicht erreichbar).");
+        snprintf(r, sizeof(r), "Could not look for updates right now (GitHub not reachable).");
       }
       toolResult(result, cap, us != update::FAILED, r);
     } else if (!strcmp(act, "clear_history")) {
-      remove("/sdcard/pixel/chat.log");
+      chats::clear();
       forgetFlag = true;
-      snprintf(result, cap, "{\"ok\":true,\"result\":\"Verlauf geloescht\"}");
+      snprintf(result, cap, "{\"ok\":true,\"result\":\"History deleted\"}");
     } else {  // sleep, privacy, restart, shutdown: after the short answer
       snprintf(pendingSys, sizeof(pendingSys), "%s", act);
       pendingSysAt = esp_timer_get_time();
-      snprintf(result, cap, "{\"ok\":true,\"result\":\"passiert gleich, sag nur ganz kurz tschuess\"}");
+      snprintf(result, cap, "{\"ok\":true,\"result\":\"happens in a moment, just say a very short goodbye\"}");
     }
   } else if (!strcmp(c.name, "set_light")) {
     lightTool(a, result, cap);
@@ -1958,17 +1945,13 @@ static void runSession() {
   rtItem[0] = truncMsg[0] = 0;
   liveDrop = false;
   interruptReq = false;
-  bool resume = histN > 0 && t0 - pausedAtUs < (int64_t)cv.resumeS * 1000000;
+  bool resume = histN > 0 && (t0 - pausedAtUs < (int64_t)cv.resumeS * 1000000 || t0 < keepUntil);
   // Realtime: a new conversation or another voice (fixed once it has spoken) needs a fresh session
   if (rt && wsUp && rtHasConv && (!resume || strcmp(rtSessVoice, rtVoice(cv.voice)))) dropSocket();
   if (!resume) {
     histN = 0;
-    struct stat st;  // keep the log small: the old half goes to chat.old.log
-    if (stat("/sdcard/pixel/chat.log", &st) == 0 && st.st_size > 512 * 1024) {
-      remove("/sdcard/pixel/chat.old.log");
-      rename("/sdcard/pixel/chat.log", "/sdcard/pixel/chat.old.log");
-    }
-    sd::append("/sdcard/pixel/chat.log", "\n--- neues Gespraech ---\n");
+    keepUntil = 0;
+    chats::begin();  // its own file on the card
   }
   inText[0] = outText[0] = 0;
   userSpokeFlag = false;
@@ -2149,6 +2132,56 @@ static void runSession() {
 }
 
 void forget() { forgetFlag = true; }
+bool resumeChat(const char* id) {
+  if (active() || !chats::validId(id)) return false;
+  snprintf(resumeId, sizeof(resumeId), "%s", id);
+  resumeReq = true;
+  for (int i = 0; i < 100 && resumeReq; ++i) vTaskDelay(pdMS_TO_TICKS(20));  // done before anything is sent
+  return !resumeReq;
+}
+void newChat() {
+  forgetFlag = true;
+  keepUntil = 0;
+  chats::begin();
+}
+
+// continue a conversation from the card (web interface): its last turns become the history, the next lines
+// go to its file, and it stays open for 10 minutes (live task)
+static void loadChat(const char* id) {
+  const long CAP = 64 * 1024;
+  char* t = (char*)heap_caps_malloc(CAP, MALLOC_CAP_SPIRAM);
+  if (!t) return;
+  if (chats::read(id, t, CAP) < 0) {
+    free(t);
+    return;
+  }
+  histN = 0;
+  for (char* l = t; *l;) {
+    char* e = strchr(l, '\n');
+    if (e) *e = 0;
+    const char* who = strlen(l) > 21 && l[4] == '-' ? l + 21 : nullptr;  // "YYYY-MM-DD HH:MM:SS  Who: text"
+    const char* c = who ? strstr(who, ": ") : nullptr;
+    if (c) {
+      if (histN == HIST) {
+        memmove(&hist[0], &hist[1], sizeof(Msg) * (HIST - 1));
+        histN--;
+      }
+      hist[histN].user = !strncmp(who, "You: ", 5) || !strncmp(who, "Du: ", 4);  // (German up to 1.1)
+      snprintf(hist[histN].text, sizeof(hist[0].text), "%s", c + 2);
+      utf8Trim(hist[histN].text);
+      histN++;
+    }
+    if (!e) break;
+    l = e + 1;
+  }
+  free(t);
+  chats::reopen(id);
+  forgetFlag = false;
+  pausedAtUs = esp_timer_get_time();
+  keepUntil = pausedAtUs + 600000000LL;
+  if (rtHasConv && ws) dropSocket();  // the warm Realtime session holds another conversation
+  ESP_LOGI(TAG, "conversation %s continued (%d turns)", id, histN);
+}
 
 static void task(void*) {
   msg = (char*)heap_caps_malloc(MSG_CAP, MALLOC_CAP_SPIRAM);
@@ -2196,6 +2229,10 @@ static void task(void*) {
       nextHome = esp_timer_get_time() + 1000000;    // and refresh the device states (they may have changed)
       backoff = 0;
       continue;
+    }
+    if (resumeReq) {
+      loadChat(resumeId);
+      resumeReq = false;
     }
     if (restReq) {  // an update downloads: the warm connections hold internal RAM it needs
       restReq = false;

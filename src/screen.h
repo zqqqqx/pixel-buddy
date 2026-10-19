@@ -6,11 +6,12 @@ namespace screen {
 
 void show(const char* title, const char* qr, const char* line1, const char* line2, const char* line3 = "");
 // The BOOT 5x menu: up to 4 big tiles (labels, IC_ icons, 0xRRGGBB colours), or a question with No / Yes
-// (yes = nullptr: just OK; mood of the eyes 0 curious, 1 worried, 2 sleepy). Text may have umlauts (UTF-8).
+// (yes = nullptr: just one button saying no; eyes 0 curious, 1 worried, 2 sleepy). Text: UTF-8, the brand font.
 enum { IC_RESTART, IC_HOTSPOT, IC_HOME, IC_POWER, IC_RESET, IC_CLOSE };
 const int HIT_CLOSE = 10, HIT_EYES = 11;
 void menu(const char* status, const char* const* labels, const int* icons, const uint32_t* colors, int n);
-void ask(const char* status, int icon, uint32_t color, const char* title, const char* line, const char* yes, int mood);
+void ask(const char* status, int icon, uint32_t color, const char* title, const char* line, const char* yes,
+         const char* no, int mood);
 int hit(int x, int y);  // tile / button under a touch (No 0, Yes 1), HIT_CLOSE, HIT_EYES or -1
 void press(int i);      // drawn pressed (-1 none)
 void lookAt(int x, int y);  // the eyes look at the finger
@@ -20,6 +21,7 @@ void poke();                // the eyes blink
 bool animating(int& x0, int& y0, int& x1, int& y1);
 // the brand page: the Pixel Buddy eyes, a title, a line below; pct >= 0 adds a progress bar (updates)
 void splash(const char* title, const char* line, int pct = -1);
+void brand(const char* line);  // the boot page: the eyes, the "pixel buddy" wordmark, a line (the version)
 void hide();
 bool active();
 uint32_t version();  // changes whenever the page changes (redraw)

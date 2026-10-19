@@ -8,74 +8,64 @@
 
 #include "esp_attr.h"
 #include "esp_timer.h"
+#include "font_ui.h"
 #include "qrcode.h"
 
 namespace screen {
 
 // classic 5x7 font, ASCII 32..126, 5 columns per glyph, bit 0 = top row
-// the hot drawing code runs from internal RAM like the eyes (no flash cache misses while both cores draw)
-#define HOT IRAM_ATTR
-static const DRAM_ATTR uint8_t FONT[95][5] = {
-    {0x00, 0x00, 0x00, 0x00, 0x00}, {0x00, 0x00, 0x5F, 0x00, 0x00}, {0x00, 0x07, 0x00, 0x07, 0x00},
-    {0x14, 0x7F, 0x14, 0x7F, 0x14}, {0x24, 0x2A, 0x7F, 0x2A, 0x12}, {0x23, 0x13, 0x08, 0x64, 0x62},
-    {0x36, 0x49, 0x55, 0x22, 0x50}, {0x00, 0x05, 0x03, 0x00, 0x00}, {0x00, 0x1C, 0x22, 0x41, 0x00},
-    {0x00, 0x41, 0x22, 0x1C, 0x00}, {0x14, 0x08, 0x3E, 0x08, 0x14}, {0x08, 0x08, 0x3E, 0x08, 0x08},
-    {0x00, 0x50, 0x30, 0x00, 0x00}, {0x08, 0x08, 0x08, 0x08, 0x08}, {0x00, 0x60, 0x60, 0x00, 0x00},
-    {0x20, 0x10, 0x08, 0x04, 0x02}, {0x3E, 0x51, 0x49, 0x45, 0x3E}, {0x00, 0x42, 0x7F, 0x40, 0x00},
-    {0x42, 0x61, 0x51, 0x49, 0x46}, {0x21, 0x41, 0x45, 0x4B, 0x31}, {0x18, 0x14, 0x12, 0x7F, 0x10},
-    {0x27, 0x45, 0x45, 0x45, 0x39}, {0x3C, 0x4A, 0x49, 0x49, 0x30}, {0x01, 0x71, 0x09, 0x05, 0x03},
-    {0x36, 0x49, 0x49, 0x49, 0x36}, {0x06, 0x49, 0x49, 0x29, 0x1E}, {0x00, 0x36, 0x36, 0x00, 0x00},
-    {0x00, 0x56, 0x36, 0x00, 0x00}, {0x08, 0x14, 0x22, 0x41, 0x00}, {0x14, 0x14, 0x14, 0x14, 0x14},
-    {0x00, 0x41, 0x22, 0x14, 0x08}, {0x02, 0x01, 0x51, 0x09, 0x06}, {0x32, 0x49, 0x79, 0x41, 0x3E},
-    {0x7E, 0x11, 0x11, 0x11, 0x7E}, {0x7F, 0x49, 0x49, 0x49, 0x36}, {0x3E, 0x41, 0x41, 0x41, 0x22},
-    {0x7F, 0x41, 0x41, 0x22, 0x1C}, {0x7F, 0x49, 0x49, 0x49, 0x41}, {0x7F, 0x09, 0x09, 0x09, 0x01},
-    {0x3E, 0x41, 0x49, 0x49, 0x7A}, {0x7F, 0x08, 0x08, 0x08, 0x7F}, {0x00, 0x41, 0x7F, 0x41, 0x00},
-    {0x20, 0x40, 0x41, 0x3F, 0x01}, {0x7F, 0x08, 0x14, 0x22, 0x41}, {0x7F, 0x40, 0x40, 0x40, 0x40},
-    {0x7F, 0x02, 0x0C, 0x02, 0x7F}, {0x7F, 0x04, 0x08, 0x10, 0x7F}, {0x3E, 0x41, 0x41, 0x41, 0x3E},
-    {0x7F, 0x09, 0x09, 0x09, 0x06}, {0x3E, 0x41, 0x51, 0x21, 0x5E}, {0x7F, 0x09, 0x19, 0x29, 0x46},
-    {0x46, 0x49, 0x49, 0x49, 0x31}, {0x01, 0x01, 0x7F, 0x01, 0x01}, {0x3F, 0x40, 0x40, 0x40, 0x3F},
-    {0x1F, 0x20, 0x40, 0x20, 0x1F}, {0x3F, 0x40, 0x38, 0x40, 0x3F}, {0x63, 0x14, 0x08, 0x14, 0x63},
-    {0x07, 0x08, 0x70, 0x08, 0x07}, {0x61, 0x51, 0x49, 0x45, 0x43}, {0x00, 0x7F, 0x41, 0x41, 0x00},
-    {0x02, 0x04, 0x08, 0x10, 0x20}, {0x00, 0x41, 0x41, 0x7F, 0x00}, {0x04, 0x02, 0x01, 0x02, 0x04},
-    {0x40, 0x40, 0x40, 0x40, 0x40}, {0x00, 0x01, 0x02, 0x04, 0x00}, {0x20, 0x54, 0x54, 0x54, 0x78},
-    {0x7F, 0x48, 0x44, 0x44, 0x38}, {0x38, 0x44, 0x44, 0x44, 0x20}, {0x38, 0x44, 0x44, 0x48, 0x7F},
-    {0x38, 0x54, 0x54, 0x54, 0x18}, {0x08, 0x7E, 0x09, 0x01, 0x02}, {0x0C, 0x52, 0x52, 0x52, 0x3E},
-    {0x7F, 0x08, 0x04, 0x04, 0x78}, {0x00, 0x44, 0x7D, 0x40, 0x00}, {0x20, 0x40, 0x44, 0x3D, 0x00},
-    {0x7F, 0x10, 0x28, 0x44, 0x00}, {0x00, 0x41, 0x7F, 0x40, 0x00}, {0x7C, 0x04, 0x18, 0x04, 0x78},
-    {0x7C, 0x08, 0x04, 0x04, 0x78}, {0x38, 0x44, 0x44, 0x44, 0x38}, {0x7C, 0x14, 0x14, 0x14, 0x08},
-    {0x08, 0x14, 0x14, 0x18, 0x7C}, {0x7C, 0x08, 0x04, 0x04, 0x08}, {0x48, 0x54, 0x54, 0x54, 0x20},
-    {0x04, 0x3F, 0x44, 0x40, 0x20}, {0x3C, 0x40, 0x40, 0x20, 0x7C}, {0x1C, 0x20, 0x40, 0x20, 0x1C},
-    {0x3C, 0x40, 0x30, 0x40, 0x3C}, {0x44, 0x28, 0x10, 0x28, 0x44}, {0x0C, 0x50, 0x50, 0x50, 0x3C},
-    {0x44, 0x64, 0x54, 0x4C, 0x44}, {0x00, 0x08, 0x36, 0x41, 0x00}, {0x00, 0x00, 0x7F, 0x00, 0x00},
-    {0x00, 0x41, 0x36, 0x08, 0x00}, {0x10, 0x08, 0x08, 0x10, 0x08},
+// ---- text in the brand font (Quicksand, tools/fontgen.py): laid out once into a small alpha image when a page
+// is set, per pixel only looked up
+struct TextImg {
+  int16_t w, h;
+  uint8_t a[240 * 40];  // alpha 0..15, row by row
 };
-// German letters and the middle dot as codes 128..135 (latin() maps UTF-8 to them)
-static const DRAM_ATTR uint8_t EXTRA[8][5] = {
-    {0x20, 0x55, 0x54, 0x55, 0x78}, {0x38, 0x45, 0x44, 0x45, 0x38}, {0x3C, 0x41, 0x40, 0x21, 0x7C},  // ä ö ü
-    {0x79, 0x14, 0x12, 0x14, 0x79}, {0x39, 0x44, 0x44, 0x44, 0x39}, {0x3D, 0x40, 0x40, 0x40, 0x3D},  // Ä Ö Ü
-    {0x7E, 0x01, 0x49, 0x56, 0x20}, {0x00, 0x08, 0x1C, 0x08, 0x00},                                  // ß ·
-};
-static void latin(char* d, int cap, const char* s) {
-  static const char* const U[8] = {"ä", "ö", "ü", "Ä", "Ö", "Ü", "ß", "·"};
-  int n = 0;
-  while (*s && n < cap - 1) {
-    int k = 0;
-    while (k < 8 && strncmp(s, U[k], 2)) ++k;  // all two bytes in UTF-8
-    if (k < 8) {
-      d[n++] = (char)(128 + k);
-      s += 2;
-    } else {
-      d[n++] = *s++;
-    }
+enum { S_STATUS, S_TILE0, S_ASKT = S_TILE0 + 4, S_ASKL0, S_ASKL1, S_YES, S_NO, S_SPL_T, S_SPL_T2, S_SPL_L, S_SHOW0,
+       S_N = S_SHOW0 + 4 };
+EXT_RAM_BSS_ATTR static TextImg txt[S_N];
+
+static uint32_t utf8(const char*& s) {
+  uint32_t c = (unsigned char)*s++;
+  int more = c >= 0xF0 ? 3 : c >= 0xE0 ? 2 : c >= 0xC0 ? 1 : 0;
+  if (more) c &= 0x3F >> more;
+  while (more-- && ((unsigned char)*s & 0xC0) == 0x80) c = c << 6 | ((unsigned char)*s++ & 0x3F);
+  return c;
+}
+static const UiGlyph* glyph(const UiFont& f, uint32_t cp) {
+  for (int i = 0; i < f.n; ++i)
+    if (f.g[i].cp == cp) return &f.g[i];
+  return glyph(f, '?');  // ('?' is in every font)
+}
+static void layout(TextImg& t, const UiFont& f, const char* s) {
+  int w = 0;
+  for (const char* p = s; *p;) w += glyph(f, utf8(p))->adv;
+  t.w = w < 240 ? w : 240;
+  t.h = f.height < 40 ? f.height : 40;
+  memset(t.a, 0, t.w * t.h);
+  int pen = 0;
+  for (const char* p = s; *p;) {
+    const UiGlyph* g = glyph(f, utf8(p));
+    for (int y = 0; y < g->h; ++y)
+      for (int x = 0; x < g->w; ++x) {
+        int X = pen + g->x + x, Y = g->y + y, i = y * g->w + x;
+        if (X < 0 || X >= t.w || Y < 0 || Y >= t.h) continue;
+        uint8_t b = f.data[g->off + i / 2], v = i & 1 ? b & 15 : b >> 4;
+        if (v > t.a[Y * t.w + X]) t.a[Y * t.w + X] = v;
+      }
+    pen += g->adv;
   }
-  d[n] = 0;
+}
+// how much of a laid out text covers (x, y): centred on mid, its line starting at top
+static inline float textA(const TextImg& t, int mid, int top, int x, int y) {
+  int l = mid - t.w / 2;
+  if (x < l || x >= l + t.w || y < top || y >= top + t.h) return 0.f;
+  return t.a[(y - top) * t.w + (x - l)] * (1.f / 15.f);
 }
 
 static volatile bool on = false;
-static bool isMenu = false, isSplash = false;
+static bool isMenu = false, isSplash = false, isBrand = false;
 static volatile int splashPct = -1;
 static volatile uint32_t ver = 0;
-static char text[4][40];
 EXT_RAM_BSS_ATTR static uint8_t qr[64][64];  // modules (version <= 10 -> 57 x 57)
 static int qrN = 0;
 
@@ -88,10 +78,10 @@ static void grab(esp_qrcode_handle_t q) {
 
 void show(const char* title, const char* code, const char* l1, const char* l2, const char* l3) {
   isMenu = isSplash = false;
-  latin(text[0], sizeof(text[0]), title);
-  latin(text[1], sizeof(text[1]), l1);
-  latin(text[2], sizeof(text[2]), l2);
-  latin(text[3], sizeof(text[3]), l3);
+  layout(txt[S_SHOW0], F_LABEL, title);
+  layout(txt[S_SHOW0 + 1], F_TEXT, l1);
+  layout(txt[S_SHOW0 + 2], F_TEXT, l2);
+  layout(txt[S_SHOW0 + 3], F_TEXT, l3);
   esp_qrcode_config_t c = ESP_QRCODE_CONFIG_DEFAULT();
   c.display_func = grab;
   c.max_qrcode_version = 10;
@@ -101,15 +91,26 @@ void show(const char* title, const char* code, const char* l1, const char* l2, c
   on = true;
   ver = ver + 1;
 }
-void splash(const char* title, const char* line, int pct) {
-  latin(text[0], sizeof(text[0]), title);
-  latin(text[1], sizeof(text[1]), line);
+static void splashOn(int pct) {
   splashPct = pct;
   qrN = 0;
   isMenu = false;
   isSplash = true;
   on = true;
   ver = ver + 1;
+}
+void splash(const char* title, const char* line, int pct) {
+  layout(txt[S_SPL_T], F_TITLE, title);
+  layout(txt[S_SPL_L], F_TEXT, line);
+  isBrand = false;
+  splashOn(pct);
+}
+void brand(const char* line) {
+  layout(txt[S_SPL_T], F_TITLE, "pixel");
+  layout(txt[S_SPL_T2], F_TITLE, "buddy");
+  layout(txt[S_SPL_L], F_TEXT, line);
+  isBrand = true;
+  splashOn(-1);
 }
 void hide() {
   on = false;
@@ -118,28 +119,8 @@ void hide() {
 bool active() { return on; }
 uint32_t version() { return ver; }
 
-// layout: title (scale 2) at the top, QR code in the middle, two text lines (scale 2) below
-// title, QR code, three text lines
-static const int TITLE_Y = 6, QR_TOP = 26, QR_BOX = 150, LINE1_Y = 182, LINE2_Y = 202, LINE3_Y = 222;
-
-HOT static bool textPixel(const char* s, int scale, int top, int x, int y, int mid = 120) {
-  if (y < top || y >= top + 7 * scale || !s[0]) return false;  // (a shrunk line stays inside this band)
-  int n = strlen(s), w = n * 6 * scale - scale;
-  if (w > 236 && scale > 1) {  // too long for big letters (e.g. an address): small ones, centred in the line
-    top += 7 * (scale - 1) / 2;
-    scale = 1;
-    w = n * 6 - 1;
-  }
-  int left = mid - w / 2;
-  if (y < top || y >= top + 7 * scale || x < left || x >= left + w) return false;
-  int cx = (x - left) / scale, cy = (y - top) / scale;
-  int ch = cx / 6, col = cx % 6;
-  if (col == 5) return false;
-  unsigned char c = (unsigned char)s[ch];
-  if (c >= 128 && c < 136) return EXTRA[c - 128][col] >> cy & 1;
-  if (c < 32 || c > 126) c = '?';
-  return FONT[c - 32][col] >> cy & 1;
-}
+// the setup page: title at the top, QR code in the middle, three text lines below
+static const int TITLE_Y = 3, QR_TOP = 30, QR_BOX = 150, LINE1_Y = 183, LINE2_Y = 201, LINE3_Y = 219;
 
 static inline uint16_t px(uint8_t r, uint8_t g, uint8_t b) {
   uint16_t v = (uint16_t)((r & 0xF8) << 8 | (g & 0xFC) << 3 | b >> 3);
@@ -172,8 +153,8 @@ static inline void blend(float* c, const uint8_t* v, float a) {
 // Pages pop in (tiles one after the other, with a little overshoot); a pressed tile sinks in and acts
 // when the finger lets go on it. Flat brand colours (docs/brand.md).
 static const uint8_t NIGHT[3] = {11, 13, 18}, CARD[3] = {24, 28, 40}, CARD_HI[3] = {40, 47, 66};
+static const int ASK_Y = 172;  // a question: the icon and the text above, the buttons below
 struct MTile {
-  char label[16];
   int icon;
   uint8_t col[3];
 };
@@ -182,7 +163,6 @@ static int nTiles = 0;
 static bool asking = false, askOne = false;  // a question; with a single OK button
 static int askIcon = 0, eyeMood = 0;         // eyes: 0 curious, 1 worried, 2 sleepy
 static uint8_t askCol[3], chipCol[3], yesText[3];
-static char askTitle[24], askLine[2][44], askYes[16], status[56];
 static volatile int pressedI = -1;
 static int64_t openT0 = 0, pageT0 = 0, blinkT0 = 0, nextBlink = 0, lookUntil = 0;
 static float tPage = 9.f, tOpen = 9.f, blinkK = 1.f;  // taken once per frame: all bands alike
@@ -191,8 +171,7 @@ static float popA[5], popK[5], popInv[5];  // per tile / button this frame: alph
 static float drawnA[5], drawnK[5], drawnHa = -1.f, drawnBg = -1.f;  // as last drawn: unchanged ones are skipped
 static int drawnPressed = -2;
 static volatile int pageGen = 1;  // the page image below (pageRow) is redrawn when this changes
-static int rowGen[240];
-static volatile int rowsBuilt = 0;  // of this page image (rows 54..239, both cores add)
+EXT_RAM_BSS_ATTR static int rowGen[240];  // (internal RAM is short: the SD card needs it)
 static inline float easeBack(float t);
 
 static void rgb(uint32_t c, uint8_t* o) {
@@ -205,7 +184,6 @@ static void page() {
   if (!(on && isMenu)) openT0 = now;  // opened just now: the background and the eyes come up too
   pageT0 = now;
   pageGen = pageGen + 1;  // the page image is drawn again in the next frame
-  rowsBuilt = 0;
   drawnBg = -1.f;  // all of it once
   pressedI = -1;
   qrN = 0;
@@ -215,10 +193,10 @@ static void page() {
   ver = ver + 1;
 }
 void menu(const char* st, const char* const* labels, const int* icons, const uint32_t* colors, int n) {
-  latin(status, sizeof(status), st);
+  layout(txt[S_STATUS], F_SMALL, st);
   nTiles = n < 4 ? n : 4;
   for (int i = 0; i < nTiles; ++i) {
-    latin(tiles[i].label, sizeof(tiles[i].label), labels[i]);
+    layout(txt[S_TILE0 + i], F_LABEL, labels[i]);
     tiles[i].icon = icons[i];
     rgb(colors[i], tiles[i].col);
   }
@@ -226,21 +204,23 @@ void menu(const char* st, const char* const* labels, const int* icons, const uin
   eyeMood = 0;
   page();
 }
-void ask(const char* st, int icon, uint32_t color, const char* title, const char* line, const char* yes, int mood) {
-  latin(status, sizeof(status), st);
+void ask(const char* st, int icon, uint32_t color, const char* title, const char* line, const char* yes,
+         const char* no, int mood) {
+  layout(txt[S_STATUS], F_SMALL, st);
   askIcon = icon;
   rgb(color, askCol);
   for (int k = 0; k < 3; ++k) chipCol[k] = (uint8_t)(NIGHT[k] + (askCol[k] - NIGHT[k]) * 0.2f);  // flat tint
   bool light = askCol[0] * 0.3f + askCol[1] * 0.59f + askCol[2] * 0.11f > 140.f;
   memcpy(yesText, light ? NIGHT : CREAM, 3);
-  latin(askTitle, sizeof(askTitle), title);
+  layout(txt[S_ASKT], F_LABEL, title);
   const char* nl = strchr(line, '\n');  // up to two lines
-  char l0[44];
+  char l0[64];
   snprintf(l0, sizeof(l0), "%.*s", nl ? (int)(nl - line) : (int)strlen(line), line);
-  latin(askLine[0], sizeof(askLine[0]), l0);
-  latin(askLine[1], sizeof(askLine[1]), nl ? nl + 1 : "");
+  layout(txt[S_ASKL0], F_TEXT, l0);
+  layout(txt[S_ASKL1], F_TEXT, nl ? nl + 1 : "");
   askOne = !yes;
-  latin(askYes, sizeof(askYes), yes ? yes : "OK");
+  layout(txt[S_YES], F_LABEL, yes ? yes : no);  // just one button: it says "no" (OK, back)
+  layout(txt[S_NO], F_LABEL, no);
   eyeMood = mood;
   asking = true;
   page();
@@ -252,7 +232,7 @@ int hit(int x, int y) {
     int i = (x >= 120) + 2 * (y >= 148);
     return i < nTiles ? i : -1;
   }
-  if (y < 164) return -1;
+  if (y < ASK_Y) return -1;
   return askOne ? 0 : x >= 120;
 }
 void press(int i) { pressedI = i; }
@@ -265,7 +245,9 @@ void poke() { nextBlink = 0; }
 bool animating(int& x0, int& y0, int& x1, int& y1) {
   if (!on || !isMenu) return false;
   int64_t now = esp_timer_get_time();
-  if (rowsBuilt < 240 - 54) pageT0 = now;  // the pop-in starts once the page image is complete
+  bool ready = true;  // the pop-in starts once the page image is complete (each row of this page)
+  for (int y = 54; y < 240 && ready; ++y) ready = rowGen[y] == pageGen;
+  if (!ready) pageT0 = now;
   tOpen = (now - openT0) * 1e-6f;
   tPage = (now - pageT0) * 1e-6f;
   if (now >= nextBlink) {  // a blink every 2.5 .. 5 s
@@ -301,9 +283,9 @@ bool animating(int& x0, int& y0, int& x1, int& y1) {
   for (int i = 0; i < 5; ++i) {
     bool moved = popA[i] != drawnA[i] || popK[i] != drawnK[i] || (pressedI != drawnPressed && (i == pressedI || i == drawnPressed));
     if (!moved) continue;
-    if (i == 4) add(0, 54, 240, asking ? 164 : 54);
+    if (i == 4) add(0, 54, 240, asking ? ASK_Y : 54);
     else if (!asking) add(i & 1 ? 120 : 0, i & 2 ? 148 : 54, i & 1 ? 240 : 120, i & 2 ? 240 : 148);
-    else add(askOne || i == 0 ? 0 : 120, 164, askOne || i == 1 ? 240 : 120, 240);
+    else add(askOne || i == 0 ? 0 : 120, ASK_Y, askOne || i == 1 ? 240 : 120, 240);
   }
   memcpy(drawnA, popA, sizeof(popA));
   memcpy(drawnK, popK, sizeof(popK));
@@ -331,14 +313,14 @@ static inline float sdSeg(float x, float y, float ax, float ay, float bx, float 
   return sqrtf(px * px + py * py);
 }
 // an arc of radius R around (0, 0), open towards the unit direction (gx, gy) by the half angle g
-HOT static float sdArc(float x, float y, float R, float gx, float gy, float g) {
+static float sdArc(float x, float y, float R, float gx, float gy, float g) {
   float u = -(x * gx + y * gy), v = x * gy - y * gx;  // the gap at angle pi
   if (fabsf(atan2f(v, u)) <= (float)M_PI - g) return fabsf(sqrtf(x * x + y * y) - R);
   float ex = -R * cosf(g), ey = R * sinf(g);
   return fminf(sqrtf((u - ex) * (u - ex) + (v - ey) * (v - ey)), sqrtf((u - ex) * (u - ex) + (v + ey) * (v + ey)));
 }
 // line icons, 2.8 px strokes, about 26 px tall, centred on (0, 0): signed distance
-HOT static float icon(int k, float x, float y) {
+static float icon(int k, float x, float y) {
   if (fabsf(x) > 16.f || fabsf(y) > 16.f) return 9.f;
   float d = 99.f;
   auto seg = [&](float ax, float ay, float bx, float by) { d = fminf(d, sdSeg(x, y, ax, ay, bx, by)); };
@@ -385,7 +367,7 @@ HOT static float icon(int k, float x, float y) {
   return d - 1.4f;
 }
 // the small Pixel Buddy eyes in the header (like the logo): look around, blink, worry, get sleepy
-HOT static void eyesPixel(float x, float y, float* c, float al) {
+static void eyesPixel(float x, float y, float* c, float al) {
   for (int i = 0; i < 2; ++i) {
     const float s = i ? 1.07f : 1.f, is = i ? 1.f / 1.07f : 1.f, cx = 120.f + (i ? 16.f : -16.f), cy = 23.f - (i ? 1.f : 0.f);
     float px = (x - cx) * is, py = (y - cy) * is;
@@ -407,9 +389,9 @@ HOT static void eyesPixel(float x, float y, float* c, float al) {
   }
 }
 // a rounded button / tile that pops in at time st (seconds), sinks in when pressed; label below the icon
-HOT static void tilePixel(float x, float y, float* c, float al, float k, float inv, bool pressed, float cx, float cy,
+static void tilePixel(float x, float y, float* c, float al, float k, float inv, bool pressed, float cx, float cy,
                           float hw, float hh, const uint8_t* fill, int ic, const uint8_t* icCol, float icY,
-                          const char* label, const uint8_t* txCol, int txY) {
+                          const TextImg& label, const uint8_t* txCol, int txY) {
   if (al <= 0.f) return;
   float sx = cx + (x - cx) * inv, sy = cy + (y - cy) * inv;
   float dx = fabsf(sx - cx), dy = fabsf(sy - cy);
@@ -423,64 +405,65 @@ HOT static void tilePixel(float x, float y, float* c, float al, float k, float i
   for (int q = 0; q < 3; ++q) f[q] = pressed ? (uint8_t)(fill == CARD ? CARD_HI[q] : fill[q] + (255 - fill[q]) * 0.2f) : fill[q];
   blend(c, f, a);
   if (ic >= 0) blend(c, icCol, clamp01(0.5f - icon(ic, sx - cx, sy - icY) * k) * al);
-  if (textPixel(label, 2, txY, (int)sx, (int)sy, (int)cx)) blend(c, txCol, al);
+  float ta = textA(label, (int)cx, txY, (int)sx, (int)sy);
+  if (ta > 0.f) blend(c, txCol, ta * al);
 }
 // where the tiles and buttons are: tile / button i -> centre and half size
 static void itemBox(int i, float& cx, float& cy, float& hw, float& hh) {
   if (!asking) {
     cx = (i & 1 ? 123.f : 6.f) + 55.5f, cy = (i & 2 ? 152.f : 60.f) + 42.f, hw = 55.5f, hh = 42.f;
   } else {
-    cx = askOne ? 120.f : i ? 178.5f : 61.5f, cy = 202.f, hw = askOne ? 114.f : 55.5f, hh = 32.f;
+    cx = askOne ? 120.f : i ? 178.5f : 61.5f, cy = 205.f, hw = askOne ? 114.f : 55.5f, hh = 29.f;
   }
 }
 // tile / button i at a pixel: fully in (al, k = 1) for the page image, or as it is right now
-HOT static void itemPixel(int i, float x, float y, float* c, float al, float k, float inv, bool pressed) {
+static void itemPixel(int i, float x, float y, float* c, float al, float k, float inv, bool pressed) {
   float cx, cy, hw, hh;
   itemBox(i, cx, cy, hw, hh);
   if (!asking) {
-    tilePixel(x, y, c, al, k, inv, pressed, cx, cy, hw, hh, CARD, tiles[i].icon, tiles[i].col, cy - 11.f, tiles[i].label,
-              CREAM, (int)cy + 15);
+    tilePixel(x, y, c, al, k, inv, pressed, cx, cy, hw, hh, CARD, tiles[i].icon, tiles[i].col, cy - 13.f,
+              txt[S_TILE0 + i], CREAM, (int)cy + 8);
   } else {
     bool yes = !askOne && i == 1;
     tilePixel(x, y, c, al, k, inv, pressed, cx, cy, hw, hh, yes ? askCol : CARD, -1, nullptr, 0.f,
-              yes || askOne ? askYes : "Nein", yes ? yesText : CREAM, 195);
+              txt[yes || askOne ? S_YES : S_NO], yes ? yesText : CREAM, (int)cy - txt[S_NO].h / 2);
   }
 }
 // The page below the header as it looks once it has come up, drawn once per page (in its first frame, while
 // nothing shows yet, on both cores): the pop-in then only scales and fades this image, a fraction of the work.
 EXT_RAM_BSS_ATTR static uint16_t pageImg[240 * 240];  // RGB565, not swapped
-HOT static void pageRow(int y) {
+static void pageRow(int y) {
+  const int gen = pageGen;  // a row started for an older page must not count for a newer one
   for (int x = 0; x < 240; ++x) {
     float c[3] = {(float)NIGHT[0], (float)NIGHT[1], (float)NIGHT[2]};
     const float fx = x + 0.5f, fy = y + 0.5f;
     if (!asking) {
       int i = (x >= 120) + 2 * (y >= 148);
       if (i < nTiles) itemPixel(i, fx, fy, c, 1.f, 1.f, 1.f, false);
-    } else if (y < 164) {  // the question: the icon in a tinted circle, the title, one or two lines
+    } else if (y < ASK_Y) {  // the question: the icon in a tinted circle, the title, one or two lines
       float d = sqrtf((fx - 120.f) * (fx - 120.f) + (fy - 79.f) * (fy - 79.f)) - 23.f;
       if (d < 1.f) {
         blend(c, chipCol, clamp01(0.5f - d));
         blend(c, askCol, clamp01(0.5f - icon(askIcon, fx - 120.f, fy - 79.f)));
       }
-      if (textPixel(askTitle, 2, 109, x, y)) blend(c, CREAM, 1.f);
-      if (textPixel(askLine[0], 2, 130, x, y) || textPixel(askLine[1], 2, 147, x, y)) blend(c, MUTED, 1.f);
+      blend(c, CREAM, textA(txt[S_ASKT], 120, 104, x, y));
+      blend(c, MUTED, fmaxf(textA(txt[S_ASKL0], 120, 130, x, y), textA(txt[S_ASKL1], 120, 149, x, y)));
     } else {
       itemPixel(askOne ? 0 : x >= 120, fx, fy, c, 1.f, 1.f, 1.f, false);
     }
     pageImg[y * 240 + x] = (uint16_t)(((int)c[0] & 0xF8) << 8 | ((int)c[1] & 0xFC) << 3 | (int)c[2] >> 3);
   }
-  rowGen[y] = pageGen;
-  __atomic_fetch_add(&rowsBuilt, 1, __ATOMIC_RELAXED);
+  rowGen[y] = gen;
 }
 // the page image at (x, y) faded in by al over the background bg (integer: this runs for most pixels)
-HOT static inline uint16_t fromPage(int x, int y, float al, const float* bg) {
+static inline uint16_t fromPage(int x, int y, float al, const float* bg) {
   uint16_t v = pageImg[y * 240 + x];
   if (al >= 1.f) return px((v >> 11) << 3, (v >> 5 & 63) << 2, (v & 31) << 3);
   int a = (int)(al * 256.f), r = (v >> 11) << 3, g = (v >> 5 & 63) << 2, b = (v & 31) << 3;
   int br = (int)bg[0], bgn = (int)bg[1], bb = (int)bg[2];
   return px((uint8_t)(br + ((r - br) * a >> 8)), (uint8_t)(bgn + ((g - bgn) * a >> 8)), (uint8_t)(bb + ((b - bb) * a >> 8)));
 }
-HOT static void renderMenu(uint16_t* buf, int x0, int y0, int x1, int y1) {
+static void renderMenu(uint16_t* buf, int x0, int y0, int x1, int y1) {
   const float bgk = easeOut(tOpen / 0.15f), ha = easeOut((tOpen - 0.05f) / 0.25f);
   const float bg[3] = {NIGHT[0] * bgk, NIGHT[1] * bgk, NIGHT[2] * bgk};
   for (int y = y0; y < y1; ++y) {
@@ -490,7 +473,7 @@ HOT static void renderMenu(uint16_t* buf, int x0, int y0, int x1, int y1) {
       if (y < 54) {  // header, drawn live: the eyes, the status line, close
         float c[3] = {bg[0], bg[1], bg[2]};
         if (y >= 8 && y < 38 && x >= 92 && x < 148) eyesPixel(fx, fy, c, ha);
-        if (textPixel(status, 1, 44, x, y)) blend(c, MUTED, ha);
+        blend(c, MUTED, textA(txt[S_STATUS], 120, 39, x, y) * ha);
         if (x >= 200 && y >= 6 && y < 40) {
           float d = sqrtf((fx - 217.f) * (fx - 217.f) + (fy - 23.f) * (fy - 23.f)) - 15.f;
           blend(c, pressedI == HIT_CLOSE ? CARD_HI : CARD, clamp01(0.5f - d) * ha);
@@ -501,7 +484,7 @@ HOT static void renderMenu(uint16_t* buf, int x0, int y0, int x1, int y1) {
       }
       int i = -1;  // the tile / button here, -1 the question text
       if (!asking) i = (x >= 120) + 2 * (y >= 148);
-      else if (y >= 164) i = askOne ? 0 : x >= 120;
+      else if (y >= ASK_Y) i = askOne ? 0 : x >= 120;
       if (i >= 0 && i == pressedI) {  // pressed: live, sunk in and lighter
         float c[3] = {bg[0], bg[1], bg[2]};
         itemPixel(i, fx, fy, c, popA[i], popK[i], popInv[i], true);
@@ -524,14 +507,14 @@ HOT static void renderMenu(uint16_t* buf, int x0, int y0, int x1, int y1) {
       }
       // the same pixel of the page image, scaled about the item's centre (nearest neighbour)
       int sx = (int)(cx + (fx - cx) * inv), sy = (int)(cy + (fy - cy) * inv);
-      bool in = i < 0 ? sy >= 54 && sy < 164 : fabsf(sx + 0.5f - cx) <= hw + 1.f && fabsf(sy + 0.5f - cy) <= hh + 1.f;
+      bool in = i < 0 ? sy >= 54 && sy < ASK_Y : fabsf(sx + 0.5f - cx) <= hw + 1.f && fabsf(sy + 0.5f - cy) <= hh + 1.f;
       *buf++ = in && sx >= 0 && sx < 240 ? fromPage(sx, sy, al, bg) : px((uint8_t)bg[0], (uint8_t)bg[1], (uint8_t)bg[2]);
     }
   }
 }
 
 // the logo: two eyes looking up to the right, the right one a little bigger (Pixel is never quite symmetric)
-HOT static void logoPixel(int x, int y, float* c) {
+static void logoPixel(int x, int y, float* c) {
   for (int i = 0; i < 2; ++i) {
     float s = i ? 1.07f : 1.f, cx = 120.f + (i ? 33.f : -33.f), cy = 84.f - (i ? 2.f : 0.f);
     float px = (x + 0.5f - cx) / s, py = (y + 0.5f - cy) / s;
@@ -549,16 +532,23 @@ HOT static void logoPixel(int x, int y, float* c) {
     }
   }
 }
-HOT static void renderSplash(uint16_t* buf, int x0, int y0, int x1, int y1) {
-  const int TITLE_Y = 142, LINE_Y = 176, BAR_Y = 204, BAR_X0 = 40, BAR_X1 = 200, BAR_H = 8;
+// the brand page: the logo's eyes, below the wordmark ("pixel" in blue, "buddy" in lilac) or a title, a line,
+// maybe a progress bar (updates)
+static const uint8_t LILAC[3] = {168, 123, 255};
+static void renderSplash(uint16_t* buf, int x0, int y0, int x1, int y1) {
+  const int TITLE_Y = 134, LINE_Y = 176, BAR_Y = 210, BAR_X0 = 50, BAR_X1 = 190, BAR_H = 6;
   int pct = splashPct;
+  const TextImg &t1 = txt[S_SPL_T], &t2 = txt[S_SPL_T2];
+  const int gap = 7, w = t1.w + (isBrand ? gap + t2.w : 0), m1 = 120 - w / 2 + t1.w / 2, m2 = 120 + w / 2 - t2.w / 2;
   for (int y = y0; y < y1; ++y)
     for (int x = x0; x < x1; ++x) {
       float c[3] = {0, 0, 0};
-      if (y < 130) logoPixel(x, y, c);
-      if (textPixel(text[0], 3, TITLE_Y, x, y)) c[0] = CREAM[0], c[1] = CREAM[1], c[2] = CREAM[2];
-      if (textPixel(text[1], pct >= 0 ? 1 : 2, pct >= 0 ? 226 : LINE_Y, x, y))
-        c[0] = MUTED[0], c[1] = MUTED[1], c[2] = MUTED[2];
+      if (y < 128) logoPixel(x, y, c);
+      if (y >= TITLE_Y && y < TITLE_Y + 40) {
+        blend(c, isBrand ? BLUE : CREAM, textA(t1, m1, TITLE_Y, x, y));
+        if (isBrand) blend(c, LILAC, textA(t2, m2, TITLE_Y, x, y));
+      }
+      blend(c, MUTED, textA(txt[S_SPL_L], 120, LINE_Y, x, y));
       if (pct >= 0 && y >= BAR_Y && y < BAR_Y + BAR_H && x >= BAR_X0 && x < BAR_X1) {
         float d = sdPill(x + 0.5f - 120.f, y + 0.5f - (BAR_Y + BAR_H / 2.f), (BAR_X1 - BAR_X0) / 2.f, BAR_H / 2.f);
         float a = clamp01(0.5f - d);
@@ -572,7 +562,7 @@ HOT static void renderSplash(uint16_t* buf, int x0, int y0, int x1, int y1) {
     }
 }
 
-HOT void render(uint16_t* buf, int x0, int y0, int x1, int y1) {
+void render(uint16_t* buf, int x0, int y0, int x1, int y1) {
   if (isSplash) {
     renderSplash(buf, x0, y0, x1, y1);
     return;
@@ -581,20 +571,20 @@ HOT void render(uint16_t* buf, int x0, int y0, int x1, int y1) {
     renderMenu(buf, x0, y0, x1, y1);
     return;
   }
-  const uint16_t BLACK = 0, WHITE = 0xFFFF;
   int scale = qrN ? QR_BOX / (qrN + 4) : 1;  // 2 modules quiet zone on each side
   int box = scale * (qrN + 4), bx = (240 - box) / 2;
   for (int y = y0; y < y1; ++y)
     for (int x = x0; x < x1; ++x) {
-      bool white;
+      float w;
       if (qrN && x >= bx && x < bx + box && y >= QR_TOP && y < QR_TOP + box) {
         int mx = (x - bx) / scale - 2, my = (y - QR_TOP) / scale - 2;
-        white = !(mx >= 0 && my >= 0 && mx < qrN && my < qrN && qr[my][mx]);
+        w = !(mx >= 0 && my >= 0 && mx < qrN && my < qrN && qr[my][mx]);
       } else {
-        white = textPixel(text[0], 2, TITLE_Y, x, y) || textPixel(text[1], 2, LINE1_Y, x, y) ||
-                textPixel(text[2], 2, LINE2_Y, x, y) || textPixel(text[3], 2, LINE3_Y, x, y);
+        w = fmaxf(fmaxf(textA(txt[S_SHOW0], 120, TITLE_Y, x, y), textA(txt[S_SHOW0 + 1], 120, LINE1_Y, x, y)),
+                  fmaxf(textA(txt[S_SHOW0 + 2], 120, LINE2_Y, x, y), textA(txt[S_SHOW0 + 3], 120, LINE3_Y, x, y)));
       }
-      *buf++ = white ? WHITE : BLACK;  // 0xFFFF / 0 are the same with swapped bytes
+      uint8_t v = (uint8_t)(w * 255.f);
+      *buf++ = px(v, v, v);
     }
 }
 

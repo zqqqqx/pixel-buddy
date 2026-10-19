@@ -12,21 +12,26 @@ namespace guard {
 inline bool askedFor(const char* action, const char* said) {
   static const struct {
     const char* action;
-    const char* words[14];
+    const char* words[24];
   } W[] = {
-      {"restart", {"start+neu", "neustart", "restart", "reboot"}},
-      {"shutdown", {"dich+aus", "fahr+runter", "herunterfahr", "shutdown", "=ausschalten", "=pixelausschalten",
-                    "=ausschaltenbitte", "=bitteausschalten", "=schaltaus", "=schalteaus", "=ausmachen", "=gehaus"}},
-      // "vergiss es" means "never mind": deleting needs to name what goes
+      // German and English (the language is a setting; what the person says decides)
+      {"restart", {"start+neu", "neustart", "restart", "reboot", "start+again", "start+over"}},
+      {"shutdown", {"dich+aus", "fahr+runter", "herunterfahr", "shutdown", "shut+down", "switch+yourself+off",
+                    "turn+yourself+off", "power+off", "=ausschalten", "=pixelausschalten", "=ausschaltenbitte",
+                    "=bitteausschalten", "=schaltaus", "=schalteaus", "=ausmachen", "=gehaus", "=switchoff",
+                    "=turnoff", "=poweroff", "=switchoffplease", "=pleaseswitchoff"}},
+      // "vergiss es" / "forget it" mean "never mind": deleting needs to name what goes
       {"clear_history", {"verlauf+l\xc3\xb6sch", "verlauf+loesch", "verlauf+vergiss", "protokoll+l\xc3\xb6sch",
-                         "protokoll+loesch", "gespr\xc3\xa4" "ch+l\xc3\xb6sch", "gespraech+loesch", "vergiss+alles"}},
-      {"forget_all", {"vergiss+alles", "l\xc3\xb6sch+alles", "loesch+alles"}},
-      // installing restarts it: only on "installier ...", "aktualisier dich", "mach / spiel / lad das update"
-      {"update_install", {"installier", "aktualisier", "update+mach", "update+spiel", "update+lad", "update+starte"}},
-      // a personality's way of talking replaces the own system prompt: only when the person says so
-      {"persona", {"rede", "sprich", "sprech", "klingen", "klingst", "ton"}},
-      // "ruhe" ends a conversation, it must not switch off listening
-      {"privacy", {"h\xc3\xb6r", "hoer", "zuh\xc3\xb6r", "privat", "mikro", "lausch"}},
+                         "protokoll+loesch", "gespr\xc3\xa4" "ch+l\xc3\xb6sch", "gespraech+loesch", "vergiss+alles",
+                         "delete+history", "clear+history", "erase+history", "delete+chat", "delete+conversation",
+                         "clear+chat", "clear+conversation", "forget+everything"}},
+      {"forget_all", {"vergiss+alles", "l\xc3\xb6sch+alles", "loesch+alles", "forget+everything", "delete+everything"}},
+      // installing restarts it: only on "installier ...", "aktualisier dich", "install", "update yourself" ...
+      {"update_install", {"installier", "aktualisier", "update+mach", "update+spiel", "update+lad", "update+starte",
+                          "install", "update+yourself", "do+the+update", "run+the+update"}},
+      // "ruhe" / "quiet" end a conversation, they must not switch off listening
+      {"privacy", {"h\xc3\xb6r", "hoer", "zuh\xc3\xb6r", "privat", "mikro", "lausch", "listen", "privacy", "microphone",
+                   "mic"}},
   };
   char letters[64];
   int n = 0;

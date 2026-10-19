@@ -1,5 +1,7 @@
 #include "settings.h"
 #include "presets.h"
+#include "i18n.h"
+#include "mic.h"
 #include "sched.h"
 
 #include <stdio.h>
@@ -27,18 +29,8 @@ namespace settings {
 static const char* TAG = "settings";
 static const char* PATH = "/sdcard/pixel/config.json";
 
-static const char* DEFAULT_PERSONA =
-    "Du bist {name}, ein kleiner, frecher und liebenswerter Roboter mit zwei grossen animierten Augen. "
-    "Du redest wie ein guter Kumpel: locker, warm, mit Witz, per du. Antworte extrem kurz - meist ein Satz, "
-    "hoechstens zwei kurze Saetze - in natuerlich gesprochenem Alltagsdeutsch, gern umgangssprachlich. "
-    "Keine Aufzaehlungen, keine Floskeln. Beende deine Antwort immer mit einer Aussage, nicht mit einer Frage. "
-    "Stell grundsaetzlich keine Rueck- oder Gegenfragen - nur wenn eine Anfrage ohne Klaerung wirklich unmoeglich "
-    "zu beantworten ist, darfst du ganz kurz nachfragen. Antworte in der Sprache, in der du angesprochen wirst.";
-
 // Everything about itself is built into the firmware (live.cpp ABOUT): this is for what the owner adds
 static const char* DEFAULT_KNOWLEDGE = "";
-// the self descriptions the knowledge field held up to version 1.1 (all start like this): now built in
-static const char* OLD_KNOWLEDGE_HEAD = "Wissen ueber dich selbst (nur erwaehnen";
 
 struct All {
   Conv c;
@@ -63,7 +55,7 @@ static volatile uint32_t ver = 1;
 static void defaults() {
   memset(&S, 0, sizeof(S));
   snprintf(S.c.name, sizeof(S.c.name), "%s", CFG_ROBOT_NAME);
-  snprintf(S.c.persona, sizeof(S.c.persona), "%s", DEFAULT_PERSONA);
+  snprintf(S.c.persona, sizeof(S.c.persona), "%s", i18n::LANGS[0].persona);
   snprintf(S.c.voice, sizeof(S.c.voice), "%s", CFG_LIVE_VOICE);
   snprintf(S.c.model, sizeof(S.c.model), "%s", CFG_LIVE_MODEL);
   snprintf(S.c.backendModel, sizeof(S.c.backendModel), "%s", CFG_BACKEND_MODEL);
@@ -72,7 +64,8 @@ static void defaults() {
   S.c.pauseS = 4.f;
   S.c.resumeS = 120;
   S.c.webSearch = true;
-  snprintf(S.c.wake, sizeof(S.c.wake), "both");
+  snprintf(S.c.wake, sizeof(S.c.wake), "pixel");
+  snprintf(S.c.lang, sizeof(S.c.lang), "en");
   S.c.wakeSens = 0.5f;
   snprintf(S.c.knowledge, sizeof(S.c.knowledge), "%s", DEFAULT_KNOWLEDGE);
   S.c.wakeBeep = true;
@@ -145,6 +138,7 @@ static cJSON* build(bool withMeta) {
   cJSON_AddBoolToObject(c, "web_search", S.c.webSearch);
   cJSON_AddStringToObject(c, "knowledge", S.c.knowledge);
   cJSON_AddStringToObject(c, "wake", S.c.wake);
+  cJSON_AddStringToObject(c, "lang", S.c.lang);
   cJSON_AddNumberToObject(c, "wake_sens", S.c.wakeSens);
   cJSON_AddBoolToObject(c, "wake_beep", S.c.wakeBeep);
   cJSON_AddStringToObject(c, "api_key", withMeta && S.c.apiKey[0] ? "********" : "");  // the key lives in NVS
@@ -266,6 +260,29 @@ static cJSON* build(bool withMeta) {
       cJSON_AddItemToArray(cw, o);
     }
     cJSON_AddItemToObject(m, "presets", cJSON_Parse(PRESETS_JSON));
+    cJSON* wk = cJSON_AddArrayToObject(m, "wakes");  // the names to choose from: those this device can hear
+    for (const Wake& w : WAKES) {
+      if (w.model && !mic::hasWakeModel(w.model)) continue;
+      cJSON* o = cJSON_CreateObject();
+      cJSON_AddStringToObject(o, "id", w.id);
+      cJSON_AddStringToObject(o, "name", w.name);
+      cJSON_AddStringToObject(o, "phrase", w.phrase);
+      cJSON_AddItemToArray(wk, o);
+    }
+    cJSON* lg = cJSON_AddArrayToObject(m, "langs");
+    for (const i18n::Lang& l : i18n::LANGS) {
+      cJSON* o = cJSON_CreateObject();
+      cJSON_AddStringToObject(o, "code", l.code);
+      cJSON_AddStringToObject(o, "name", l.name);
+      cJSON_AddItemToArray(lg, o);
+    }
+    cJSON* ms = cJSON_AddArrayToObject(m, "models");
+    for (const Model& md : MODELS) {
+      cJSON* o = cJSON_CreateObject();
+      cJSON_AddStringToObject(o, "id", md.id);
+      cJSON_AddStringToObject(o, "label", md.label);
+      cJSON_AddItemToArray(ms, o);
+    }
     const char* voices[] = {"marin", "cedar", "juni", "flitz", "brise", "sillage", "alloy", "ash", "ballad", "coral",
                             "echo", "sage", "shimmer", "verse", "quartz", "ripple", "vesper", "willow", "stone",
                             "gleam", "meridian", "beacon", "delta", "cinder", "bossa", "tempo", "harema", "nira",
@@ -291,7 +308,19 @@ static void merge(const cJSON* j) {
     str(c, "backend_effort", S.c.backendEffort, sizeof(S.c.backendEffort));
     flag(c, "web_search", S.c.webSearch);
     str(c, "knowledge", S.c.knowledge, sizeof(S.c.knowledge));
+    char was[12];
+    snprintf(was, sizeof(was), "%s", S.c.wake);
     str(c, "wake", S.c.wake, sizeof(S.c.wake));
+    snprintf(was, sizeof(was), "%s", S.c.lang);
+    str(c, "lang", S.c.lang, sizeof(S.c.lang));
+    int nl = i18n::index(S.c.lang);  // another language: the default personality follows, an own one stays
+    if (strcmp(was, S.c.lang) && nl >= 0 && !cJSON_GetObjectItem(c, "persona"))
+      for (const i18n::Lang& L : i18n::LANGS)
+        if (!strcmp(S.c.persona, L.persona)) snprintf(S.c.persona, sizeof(S.c.persona), "%s", i18n::LANGS[nl].persona);
+    if (!strcmp(S.c.wake, "both")) snprintf(S.c.wake, sizeof(S.c.wake), "pixel");     // up to 1.1: Pixel and
+    if (!strcmp(S.c.wake, "halloesp")) snprintf(S.c.wake, sizeof(S.c.wake), "esp");   // Hallo ESP at once
+    if (strcmp(was, S.c.wake) && !cJSON_GetObjectItem(c, "name"))  // another wake word: another name
+      snprintf(S.c.name, sizeof(S.c.name), "%s", wakeOf(S.c.wake).name);
     num(c, "wake_sens", S.c.wakeSens);
     flag(c, "wake_beep", S.c.wakeBeep);
     const cJSON* k = cJSON_GetObjectItem(c, "api_key");
@@ -441,8 +470,8 @@ static void merge(const cJSON* j) {
   if (S.ledBright < 0) S.ledBright = 0;
   if (S.ledBright > 100) S.ledBright = 100;
   if (S.c.pauseS < 1.5f) S.c.pauseS = 1.5f;
-  if (strcmp(S.c.wake, "pixel") && strcmp(S.c.wake, "halloesp") && strcmp(S.c.wake, "both"))
-    snprintf(S.c.wake, sizeof(S.c.wake), "both");
+  snprintf(S.c.wake, sizeof(S.c.wake), "%s", wakeOf(S.c.wake).id);  // unknown: Pixel
+  if (i18n::index(S.c.lang) < 0) snprintf(S.c.lang, sizeof(S.c.lang), "en");
   if (S.c.wakeSens < 0.f) S.c.wakeSens = 0.f;
   if (S.c.wakeSens > 1.f) S.c.wakeSens = 1.f;
   S.c.nightFrom = ((S.c.nightFrom % 24) + 24) % 24;
@@ -460,9 +489,7 @@ static void merge(const cJSON* j) {
                         "beacon", "delta", "cinder", "bossa", "tempo", "harema", "nira", "noeul", "nuri", "shida"})
     known |= !strcmp(v, S.c.voice);
   if (!known) snprintf(S.c.voice, sizeof(S.c.voice), "%s", CFG_LIVE_VOICE);
-  // an old self description (or the one from the Gemini days) would contradict the built-in one
-  if (strstr(S.c.knowledge, "Gemini") || !strncmp(S.c.knowledge, OLD_KNOWLEDGE_HEAD, strlen(OLD_KNOWLEDGE_HEAD)))
-    snprintf(S.c.knowledge, sizeof(S.c.knowledge), "%s", DEFAULT_KNOWLEDGE);
+  stripOldKnowledge(S.c.knowledge);  // the old self description would repeat the built-in one
 }
 
 // ---------------------------------------------------------------- storage
@@ -553,6 +580,8 @@ void init() {
     cJSON* j = cJSON_Parse(t);
     if (j) {
       merge(j);  // an old config.json may still hold the keys: they move to NVS with the save below
+      // set up before there was a choice of language: it spoke German
+      if (!cJSON_GetObjectItem(cJSON_GetObjectItem(j, "conversation"), "lang")) snprintf(S.c.lang, sizeof(S.c.lang), "de");
       cJSON_Delete(j);
       ESP_LOGI(TAG, "settings loaded from %s", sd::ok() ? PATH : "NVS");
     }
@@ -585,6 +614,7 @@ void conv(Conv& out) {
     free(tmp);
   }
 }
+const char* lang() { return S.c.lang; }
 const char* apiKey() { return S.c.apiKey[0] ? S.c.apiKey : OPENAI_API_KEY; }
 int brightness() { return S.brightness; }
 void leds(int& mode, int& bright, uint32_t& color) {
