@@ -42,6 +42,14 @@ static const char* const TEXT[T_COUNT][N_LANG] = {
     {"then open 192.168.4.1", "dann 192.168.4.1 öffnen"},
     {"Connected!", "Verbunden!"},
     {"pixel.local", "pixel.local"},
+    {"Mute the mic?", "Mikro aus?"},
+    {"To hear me again:\nhold my face for 5 s.", "Wieder an: mein Gesicht\n5 Sekunden gedrückt halten."},
+    {"Mute", "Aus"},
+    {"Mic back on?", "Mikro wieder an?"},
+    {"Then I hear my\nname again.", "Dann höre ich wieder\nauf meinen Namen."},
+    {"On", "An"},
+    {"Mic off", "Mikro aus"},
+    {"I'm listening", "Ich höre wieder"},
 };
 
 const char* t(Text id) {

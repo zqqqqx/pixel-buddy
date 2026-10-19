@@ -60,8 +60,9 @@ be changed later under Settings → Voice.
 | Say his name ("Pixel", "Hey Buddy" …) | start talking; a short tone confirms |
 | Tap while he talks | interrupt him |
 | "stop", "be quiet", "never mind" … | end the conversation |
-| BOOT 5× quickly | menu: Restart, Hotspot / Home WiFi, Off, Reset – each asks once; BOOT or ✕ closes it |
-| BOOT short / long | next animation / next colours |
+| BOOT | menu: Restart, Hotspot / Home WiFi, Off, Reset and the microphone (top left) – each asks once; BOOT or ✕ closes it |
+| BOOT long | next colours |
+| Microphone off (menu) | he hears nothing, a thin red frame shows; hold his face for 5 s to switch it back on |
 
 By voice: change his look (colours, eye shape, lids, pupils, a whole preset – "be the robot"), LED colour, voice
 and model, web search, lights (colour, brightness, white, effects) and other Home Assistant devices, timers,

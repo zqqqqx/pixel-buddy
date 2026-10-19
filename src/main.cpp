@@ -29,6 +29,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "nvs.h"
 
 #include "config.h"
 #include "cJSON.h"
@@ -76,6 +77,7 @@ static const int NBUF = 5;
 static int64_t frameUs = 1000000 / CFG_MAX_FPS;  // from the settings
 static float brightness = CFG_BRIGHTNESS;  // wanted (setting, night, schedule)
 static float backlight = 0;                 // what the backlight shows right now
+static bool muted = false;     // microphone off (BOOT menu): no wake word until the face is held for 5 s
 static bool displayDark = false;            // display off timeout: nobody there
 
 // ============================================================== display
@@ -199,6 +201,20 @@ static uint16_t* renderBand(const FrameJob& j, int k) {
     screen::render(buf, j.x0, y0, j.x1, y1);
   else
     eyes::render(buf, j.x0, y0, j.x1, y1);
+  if (j.mode == 0 && muted) {  // a thin red frame at the edge: the microphone is off
+#ifdef EYES_SWAP_BYTES
+    const uint16_t RED = 0xC6F9;  // #FF3B30
+#else
+    const uint16_t RED = 0xF9C6;
+#endif
+    const int B = 2, w = j.x1 - j.x0;
+    for (int y = y0; y < y1; ++y) {
+      uint16_t* row = buf + (y - y0) * w - j.x0;  // indexed by x
+      bool edge = y < B || y >= 240 - B;
+      for (int x = j.x0; x < (edge ? j.x1 : B); ++x) row[x] = RED;
+      for (int x = edge ? j.x1 : (j.x0 > 240 - B ? j.x0 : 240 - B); x < j.x1; ++x) row[x] = RED;
+    }
+  }
   statWait += t1 - t0;
   statRender += esp_timer_get_time() - t1;
   return buf;
@@ -338,6 +354,20 @@ static bool eyesListening = false;
 
 static bool night = false;     // night mode right now
 static bool privacy = false;   // "hoer nicht mehr zu": no wake word until touched
+static bool redrawAll = false; // the whole screen once (the red frame of the muted microphone came or went)
+static void setMuted(bool m) {
+  muted = m;
+  if (!live::active()) mic::setWake(!m && !privacy);
+  nvs_handle_t h;
+  if (nvs_open("pixel", NVS_READWRITE, &h) == ESP_OK) {  // stays muted after a restart
+    nvs_set_u8(h, "muted", m);
+    nvs_commit(h);
+    nvs_close(h);
+  }
+  screen::micMuted(m);
+  redrawAll = true;
+  printf("microphone %s\n", m ? "muted" : "on");
+}
 static uint32_t lampRgb = 0;   // a lamp just changed: its colour on the LEDs until lampUntil
 static int64_t lampUntil = 0;
 static bool wakeBeep = true;
@@ -529,7 +559,7 @@ static void runLive() {
     talking = false;
   }
   if (p == live::IDLE && last != live::IDLE) {
-    mic::setWake(!privacy);
+    mic::setWake(!privacy && !muted);
     if (eyesListening) eyes::react(nullptr, 0);  // nobody spoke: just stop listening
     eyesListening = false;
   }
@@ -540,13 +570,14 @@ static void runLive() {
 EXT_RAM_BSS_ATTR static settings::Conv bootConv;
 static int64_t renameAt = 0;
 
-// ---- BOOT pressed 5x quickly: the menu (restart, hotspot mode, switch off, factory settings). Every
-// action asks once more, so a stray touch never does anything; it goes after a short goodbye on the display.
+// ---- BOOT pressed: the menu (restart, hotspot mode, switch off, factory settings; the microphone in the
+// header). Every action asks once more, so a stray touch never does anything; it goes after a short goodbye
+// on the display.
 static bool menuOpen = false;
 static int menuQ = -1;  // the question on screen (index of the tile), -1 the tiles
 static int64_t menuAt = 0, actAt = 0;
 static int act = -1;
-static const uint32_t C_BLUE = 0x3D6BFF, C_MINT = 0x38D39F, C_LILAC = 0xA87BFF, C_ROUGE = 0xFF689C;
+static const uint32_t C_BLUE = 0x3D6BFF, C_MINT = 0x38D39F, C_LILAC = 0xA87BFF, C_ROUGE = 0xFF689C, C_RED = 0xFF3B30;
 static void menuStatus(char* s, int cap) {
   int b = battery::level();
   char bat[24] = "";
@@ -581,6 +612,10 @@ static void menuAsk(int k) {
     screen::ask(st, screen::IC_HOTSPOT, C_MINT, t(T_ASK_HOTSPOT), line, yes, no, 0);
   } else if (k == 1) {
     screen::ask(st, screen::IC_HOME, C_MINT, t(T_ASK_HOME), t(T_ASK_HOME_L), yes, no, 0);
+  } else if (k == 4 && muted) {
+    screen::ask(st, screen::IC_MIC, C_MINT, t(T_ASK_UNMUTE), t(T_ASK_UNMUTE_L), t(T_UNMUTE), no, 0);
+  } else if (k == 4) {
+    screen::ask(st, screen::IC_MUTED, C_RED, t(T_ASK_MUTE), t(T_ASK_MUTE_L), t(T_MUTE), no, 2);
   } else if (k == 2) {
     screen::ask(st, screen::IC_POWER, C_LILAC, t(T_ASK_OFF), t(T_ASK_OFF_L), yes, no, 2);
   } else {
@@ -597,11 +632,18 @@ static void factoryReset() {
   assist::wipe();       // timers, memory, costs
   net::forgetWifi();    // the network from the setup (a network built into the firmware stays)
   chats::clear();
+  setMuted(false);
   vTaskDelay(pdMS_TO_TICKS(300));
   esp_restart();
 }
 // yes: a goodbye on the display, the frames go on meanwhile, then it happens (setupScreen)
 static void menuDo(int k) {
+  if (k == 4) {  // the microphone: no restart, the menu just closes after the goodbye
+    screen::splash(i18n::t(muted ? i18n::T_BYE_UNMUTE : i18n::T_BYE_MUTE), "");
+    act = k;
+    actAt = esp_timer_get_time() + 1300000;
+    return;
+  }
   if (k == 1) {
     net::setHotspot(!net::hotspot());
     printf("hotspot mode %s\n", net::hotspot() ? "off" : "on");
@@ -619,6 +661,8 @@ static void menuTap(int i) {
     menuClose();
   } else if (i == screen::HIT_EYES) {
     screen::poke();
+  } else if (i == screen::HIT_MIC) {
+    menuAsk(4);
   } else if (menuQ < 0) {
     if (i >= 0) menuAsk(i);
   } else if (i == 1) {
@@ -659,8 +703,15 @@ static void pollInputs() {
     ringStop(true);
     if (privacy) {
       privacy = false;
-      if (!live::active()) mic::setWake(true);
+      if (!live::active()) mic::setWake(!muted);
     }
+  }
+  static int64_t holdT0 = 0;  // muted: holding the face for 5 s switches the microphone back on
+  if (muted && down && !wasDown) holdT0 = esp_timer_get_time();
+  if (muted && down && holdT0 && esp_timer_get_time() - holdT0 > 5000000) {
+    holdT0 = 0;
+    setMuted(false);
+    eyes::trigger(eyes::behaviorIndex("wake up"));
   }
   wasDown = down;
   eyes::touch(down, x, y);
@@ -670,7 +721,7 @@ static void pollInputs() {
   eyes::voice(m.voice, m.level, m.pitch);
   float mc, mb, mp, ml, md;  // music nearby: the eyes dance along (speech / TV talk stay below ~0.45)
   mic::music(mc, mb, mp, ml, md);
-  eyes::music(fminf(1.f, fmaxf(0.f, (mc - 0.55f) * 4.f)), mb, mp, ml, md, !night && !privacy);
+  eyes::music(fminf(1.f, fmaxf(0.f, (mc - 0.55f) * 4.f)), mb, mp, ml, md, !night && !privacy && !muted);
   static int wakes = 0;
   int wk = mic::wakeWords();
   if (wk != wakes) {
@@ -682,9 +733,7 @@ static void pollInputs() {
   wasVoice = m.voice;
 
   static int64_t pressT = 0;
-  static bool pressed = false, longFired = false;
-  static int clicks = 0;
-  static int64_t lastClick = 0;
+  static bool pressed = true, longFired = true;  // still held from switching on: not a press
   bool b = gpio_get_level(PIN_BOOT) == 0;
   int64_t now = esp_timer_get_time();
   if (b) activity();
@@ -699,17 +748,11 @@ static void pollInputs() {
   } else if (!b && pressed) {
     pressed = false;
     if (!longFired && now - pressT > 30000) {
-      clicks = now - lastClick < 600000 ? clicks + 1 : 1;
-      lastClick = now;
-      if (menuOpen) {  // a press while the menu is open closes it
-        clicks = 0;
-        if (act < 0) menuClose();
-      } else if (clicks >= 5) {
-        clicks = 0;
-        printf("BOOT 5x: menu\n");
+      if (!menuOpen) {
+        printf("BOOT: menu\n");
         menuShow();
-      } else {
-        eyes::buttonClick();
+      } else if (act < 0) {  // a press while the menu is open closes it
+        menuClose();
       }
     }
   }
@@ -724,8 +767,8 @@ static void pollInputs() {
         printf("  %c = %s\n", k < 10 ? '0' + k : 'A' + k - 10, eyes::behaviorName(k));
       printf("  n = next, c = next colour, t = toggle touch log, m = toggle mic log, b = benchmark\n"
              "  w = as if \"Pixel\" was heard (incl. the recording), p = CPU time per task since the last 'p'\n"
-             "  ! = cycle through the error animations, # = the BOOT menu (1-4 its questions)\n");
-    } else if (menuOpen && c >= '1' && c <= '4') {
+             "  ! = cycle through the error animations, # = the BOOT menu (1-5 its questions), u = microphone muted on / off\n");
+    } else if (menuOpen && c >= '1' && c <= '5') {
       menuAsk(c - '1');
     } else if (c >= '0' && c <= '9') {
       eyes::trigger(c - '0');
@@ -735,6 +778,8 @@ static void pollInputs() {
       mic::fakeWake();
     } else if (c == '#') {
       menuShow();
+    } else if (c == 'u') {
+      setMuted(!muted);
     } else if (c == '!') {
       static int k = 0;
       const char* E[] = {"offline", "quota", "cant", "huh", "locked", "glitch"};
@@ -811,7 +856,7 @@ static void publishStatus(float fps) {
            "\"colorway\":\"%s\",\"live\":\"%s\",\"heap\":%u,\"psram\":%u,\"sd\":%s,\"build\":\"%s %s\","
            "\"usd_today\":%.3f,\"usd_month\":%.3f,\"timers\":%d,\"night\":%s,\"privacy\":%s,\"setup\":%s,"
            "\"ringing\":%s,\"slot\":\"%s\",\"display\":%d,\"battery\":%d,\"charging\":%s,\"version\":\"%s\","
-           "\"update\":\"%s\",\"heap_block\":%u,\"hotspot\":%s,\"hotspot_ssid\":\"%s\"}",
+           "\"update\":\"%s\",\"heap_block\":%u,\"hotspot\":%s,\"hotspot_ssid\":\"%s\",\"muted\":%s}",
            net::ip(), net::ssid(), net::rssi(), esp_timer_get_time() / 1000000, fps, eyes::currentName(),
            eyes::colorwayName(), PH[(int)live::phase()], (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM), sd::ok() ? "true" : "false", app->date, app->time,
@@ -821,7 +866,7 @@ static void publishStatus(float fps) {
            battery::charging() ? "true" : "false", PIXEL_VERSION,
            update::state() == update::AVAILABLE ? update::latest() : "",
            (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), net::hotspot() ? "true" : "false",
-           net::hotspotSsid());
+           net::hotspotSsid(), muted ? "true" : "false");
   web::setStatus(j);
 }
 
@@ -874,7 +919,7 @@ static void ledsTick(int64_t now) {
       a = b = scale(iris, 0.25f + 0.75f * mic::speakLevel());
     } else if (ph != live::IDLE) {
       a = b = scale(iris, 0.3f + 0.5f * pulse);
-    } else if (privacy) {
+    } else if (privacy || muted) {
       a = b = 0x300000;
     } else if (mode == 2 && !eyes::asleep()) {
       a = b = scale(iris, 0.12f + 0.04f * sinf(t * 1.3f));
@@ -901,6 +946,12 @@ static void setupScreen() {
   char key[96];
   if (menuOpen) {
     if (act >= 0 && esp_timer_get_time() > actAt) {
+      if (act == 4) {
+        act = -1;
+        setMuted(!muted);
+        menuClose();
+        return;
+      }
       if (act == 2) shutdown();
       if (act == 3) factoryReset();
       esp_restart();  // restart, or the other network
@@ -1049,6 +1100,10 @@ static void frameTask(void*) {
       screenVer = screen::version();
       r = {0, 0, 240, 240};
     }
+    if (redrawAll && !screen::active()) {  // the red frame came or went
+      redrawAll = false;
+      r = {0, 0, 240, 240};
+    }
     // display off timeout: nobody there for a while -> backlight fades out and drawing pauses
     if (live::active() || ringUntil || menuOpen || screen::active()) activity();
     if (!lastActive) lastActive = now;
@@ -1188,6 +1243,13 @@ extern "C" void app_main(void) {
   settings::conv(bootConv);  // the wake word (= the name) heard from now on; another one counts after a restart
   if (CFG_MIC_ENABLE && !mic::start(settings::wakeOf(bootConv.wake).model))
     ESP_LOGW(TAG, "microphone unavailable, listening animation disabled");
+  nvs_handle_t nh;
+  uint8_t mu = 0;
+  if (nvs_open("pixel", NVS_READONLY, &nh) == ESP_OK) {
+    nvs_get_u8(nh, "muted", &mu);
+    nvs_close(nh);
+  }
+  if (mu) setMuted(true);  // muted before the restart
   net::start();
   live::start();
   eyes::init(esp_random());

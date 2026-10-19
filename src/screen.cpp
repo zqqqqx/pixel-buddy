@@ -132,7 +132,7 @@ static inline uint16_t px(uint8_t r, uint8_t g, uint8_t b) {
 
 // brand colours (docs/brand.md)
 static const uint8_t CREAM[3] = {246, 243, 234}, BLUE[3] = {61, 107, 255}, MUTED[3] = {139, 148, 169},
-                     TRACK[3] = {37, 43, 58};
+                     TRACK[3] = {37, 43, 58}, RED[3] = {255, 69, 58};
 static inline float clamp01(float v) { return v < 0.f ? 0.f : v > 1.f ? 1.f : v; }
 // rounded box (pill), signed distance
 static inline float sdPill(float x, float y, float hx, float hy) {
@@ -147,7 +147,7 @@ static inline float easeOut(float t) {
 static inline void blend(float* c, const uint8_t* v, float a) {
   for (int k = 0; k < 3; ++k) c[k] += (v[k] - c[k]) * a;
 }
-// ------------------------------------------------------------------ the menu (BOOT 5x)
+// ------------------------------------------------------------------ the menu (BOOT)
 // Up to four big tiles (2 x 2, each a whole quarter of the screen to hit), or a question with No / Yes:
 // nothing happens on a single stray touch. Small Pixel Buddy eyes on top watch the finger and blink.
 // Pages pop in (tiles one after the other, with a little overshoot); a pressed tile sinks in and acts
@@ -164,6 +164,7 @@ static bool asking = false, askOne = false;  // a question; with a single OK but
 static int askIcon = 0, eyeMood = 0;         // eyes: 0 curious, 1 worried, 2 sleepy
 static uint8_t askCol[3], chipCol[3], yesText[3];
 static volatile int pressedI = -1;
+static bool micOff = false;  // the microphone button in the header: muted
 static int64_t openT0 = 0, pageT0 = 0, blinkT0 = 0, nextBlink = 0, lookUntil = 0;
 static float tPage = 9.f, tOpen = 9.f, blinkK = 1.f;  // taken once per frame: all bands alike
 static float lookX = 0.f, lookY = 0.f, lookTX = 0.f, lookTY = 0.f;
@@ -227,7 +228,7 @@ void ask(const char* st, int icon, uint32_t color, const char* title, const char
 }
 int hit(int x, int y) {
   if (!on || !isMenu) return -1;
-  if (y < 54) return x >= 190 ? HIT_CLOSE : x >= 86 && x < 156 ? HIT_EYES : -1;
+  if (y < 54) return x >= 190 ? HIT_CLOSE : x < 50 ? HIT_MIC : x >= 86 && x < 156 ? HIT_EYES : -1;
   if (!asking) {
     int i = (x >= 120) + 2 * (y >= 148);
     return i < nTiles ? i : -1;
@@ -236,6 +237,10 @@ int hit(int x, int y) {
   return askOne ? 0 : x >= 120;
 }
 void press(int i) { pressedI = i; }
+void micMuted(bool m) {
+  micOff = m;
+  drawnHa = -1.f;  // the header again
+}
 void lookAt(int x, int y) {
   lookTX = fmaxf(-1.f, fminf(1.f, (x - 120) / 90.f));
   lookTY = fmaxf(-1.f, fminf(1.f, (y - 23) / 110.f));
@@ -279,7 +284,8 @@ bool animating(int& x0, int& y0, int& x1, int& y1) {
   };
   float bgk = easeOut(tOpen / 0.15f), ha = easeOut((tOpen - 0.05f) / 0.25f);
   if (bgk != drawnBg) add(0, 0, 240, 240);
-  if (ha != drawnHa || pressedI == HIT_CLOSE || drawnPressed == HIT_CLOSE) add(0, 0, 240, 54);
+  bool hdr = pressedI == HIT_CLOSE || drawnPressed == HIT_CLOSE || pressedI == HIT_MIC || drawnPressed == HIT_MIC;
+  if (ha != drawnHa || hdr) add(0, 0, 240, 54);
   for (int i = 0; i < 5; ++i) {
     bool moved = popA[i] != drawnA[i] || popK[i] != drawnK[i] || (pressedI != drawnPressed && (i == pressedI || i == drawnPressed));
     if (!moved) continue;
@@ -362,6 +368,14 @@ static float icon(int k, float x, float y) {
     case IC_CLOSE:
       seg(-5.f, -5.f, 5.f, 5.f);
       seg(-5.f, 5.f, 5.f, -5.f);
+      break;
+    case IC_MIC:  // a microphone: the capsule, its holder, the stand
+    case IC_MUTED:  // crossed out
+      d = fabsf(sdPill(x, y + 6.f, 4.5f, 7.5f));
+      d = fminf(d, sdArc(x, y + 4.f, 9.f, 0.f, -1.f, 1.2f));
+      seg(0.f, 5.f, 0.f, 11.f);
+      seg(-5.f, 11.f, 5.f, 11.f);
+      if (k == IC_MUTED) seg(-11.f, -12.f, 11.f, 12.f);
       break;
   }
   return d - 1.4f;
@@ -474,6 +488,12 @@ static void renderMenu(uint16_t* buf, int x0, int y0, int x1, int y1) {
         float c[3] = {bg[0], bg[1], bg[2]};
         if (y >= 8 && y < 38 && x >= 92 && x < 148) eyesPixel(fx, fy, c, ha);
         blend(c, MUTED, textA(txt[S_STATUS], 120, 39, x, y) * ha);
+        if (x < 40 && y >= 6 && y < 40) {  // the microphone, the size of close: its icon scaled down
+          float d = sqrtf((fx - 23.f) * (fx - 23.f) + (fy - 23.f) * (fy - 23.f)) - 15.f;
+          blend(c, pressedI == HIT_MIC ? CARD_HI : CARD, clamp01(0.5f - d) * ha);
+          float di = icon(micOff ? IC_MUTED : IC_MIC, (fx - 23.f) * 1.5f, (fy - 23.f) * 1.5f) / 1.5f;
+          blend(c, micOff ? RED : pressedI == HIT_MIC ? CREAM : MUTED, clamp01(0.5f - di) * ha);
+        }
         if (x >= 200 && y >= 6 && y < 40) {
           float d = sqrtf((fx - 217.f) * (fx - 217.f) + (fy - 23.f) * (fy - 23.f)) - 15.f;
           blend(c, pressedI == HIT_CLOSE ? CARD_HI : CARD, clamp01(0.5f - d) * ha);

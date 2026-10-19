@@ -505,7 +505,7 @@ pre.log{margin:0;padding:14px 18px;white-space:pre-wrap;font:13px/1.5 ui-monospa
     <button class="row act" onclick="hsSave()"><span class="t">Save</span></button>
     <button class="row red" id="hsDel" onclick="$('#hsSsid').value='';hsSave()"><span class="t">Remove</span></button>
   </div>
-  <div class="note">On and off: press BOOT five times.</div>
+  <div class="note">On and off: press BOOT.</div>
 </section>
 
 <!-- ============================================================ updates -->
@@ -597,7 +597,7 @@ const I18N={de:{
 'Head follows the gaze':'Kopf folgt dem Blick','Breathing':'Atmen','Blinks at the earliest':'Blinzeln frühestens','Blinks at the latest':'Blinzeln spätestens',
 'Pause from':'Pause ab','Pause to':'Pause bis','WiFi':'WLAN','Other networks':'Andere Netze','Password':'Passwort','Connect':'Verbinden','Forget WiFi':'WLAN vergessen',
 'On the go':'Unterwegs','Hotspot mode':'Hotspot-Modus',"Your phone's hotspot":'Hotspot deines Handys','Save':'Speichern','Remove':'Entfernen',
-'On and off: press BOOT five times.':'Ein und aus: Taste BOOT fünfmal drücken.','Install':'Installieren','Check for updates':'Nach Updates suchen','Automatic':'Automatisch',
+'On and off: press BOOT.':'Ein und aus: Taste BOOT drücken.','Install':'Installieren','Check for updates':'Nach Updates suchen','Automatic':'Automatisch',
 'Automatic updates':'Automatische Updates','Time':'Uhrzeit','Firmware file':'Firmware-Datei','Choose file':'Datei wählen','Backup':'Sicherung','Last backup':'Letzte Sicherung',
 'Back up now':'Jetzt sichern','Restore':'Wiederherstellen','Export settings':'Einstellungen exportieren','Import settings':'Einstellungen importieren',
 'Train the wake word':'Aktivierungswort trainieren','Recordings':'Aufnahmen','Record the name':'Namen aufnehmen','Record the room (10 s)':'Umgebung aufnehmen (10 s)',
@@ -624,7 +624,7 @@ const I18N={de:{
 'Look, temperament and behaviour. WiFi, keys and chats stay.':'Look, Temperament und Verhalten. WLAN, Schlüssel und Gespräche bleiben.','Reset':'Zurücksetzen',
 '{n} of 800':'{n} von 800','name':'Name','false alarm':'Fehlauslösung','room':'Umgebung','No recordings':'Keine Aufnahmen','Delete automatic recordings?':'Automatische Aufnahmen löschen?',
 '{n} deleted':'{n} gelöscht','Say the name now':'Jetzt den Namen sagen','Recording …':'Nimmt auf …','Very quiet':'Sehr leise','Overloaded':'Übersteuert','Not a look file':'Keine Look-Datei',
-'Look loaded':'Look geladen','Undo':'Rückgängig','Pixel is back':'Pixel ist wieder da','Restoring':'Wiederhergestellt','Night':'Nachtmodus','Say “{p}”':'Sag „{p}“',
+'Mic off':'Mikro aus','Look loaded':'Look geladen','Undo':'Rückgängig','Pixel is back':'Pixel ist wieder da','Restoring':'Wiederhergestellt','Night':'Nachtmodus','Say “{p}”':'Sag „{p}“',
 'Pixel restarts to learn its new name.':'Pixel startet kurz neu, um seinen neuen Namen zu lernen.','Call it {n}?':'{n} nennen?','Rename':'Umbenennen',
 'Pixel is talking right now':'Pixel spricht gerade','No SD card':'Keine SD-Karte','800 recordings: back them up and delete the automatic ones':'800 Aufnahmen: erst sichern, dann automatische löschen',
 'Network name missing or invalid, or password shorter than 8 characters':'Netzname fehlt oder ungültig, oder Passwort kürzer als 8 Zeichen','Update failed':'Update fehlgeschlagen',
@@ -823,7 +823,7 @@ function status(){api('GET','/api/status').then(s=>{
   if(fails>=2)toast(t('Pixel is back'));fails=0;$('#offline').classList.remove('on');seen=s;S=s;
   const busy=s.live!=='idle';$('#heroDot').className='dot '+(s.setup?'bad':busy?'busy':'ok');
   const w=(M.wakes||[]).find(x=>x.id===get('conversation.wake'));
-  $('#heroState').textContent=[s.night?t('Night'):t(ST[s.live]||s.live),s.hotspot?'Hotspot':'',s.battery>=0?s.battery+' %':'',w&&!busy?t('Say “{p}”',{p:w.phrase}):''].filter(Boolean).join(' · ');
+  $('#heroState').textContent=[s.night?t('Night'):t(ST[s.live]||s.live),s.hotspot?'Hotspot':'',s.battery>=0?s.battery+' %':'',s.muted?t('Mic off'):w&&!busy?t('Say “{p}”',{p:w.phrase}):''].filter(Boolean).join(' · ');
   $('#prodVer').textContent=s.version||'';$('#ring').style.display=s.ringing?'inline-flex':'none';
   $('#upRow').style.display=s.update?'':'none';$('#upRowT').textContent=t('Version {v} is here',{v:s.update});const ub=$('#upBadge');if(ub)ub.style.display=s.update?'':'none';
   $('#stat').innerHTML=dl([['Doing',esc(lab(s.behavior))],s.battery>=0&&['Battery',s.battery+' %'+(s.charging?' · '+t('charging'):'')],[s.hotspot?'Hotspot':'WiFi',esc(s.ssid)],
