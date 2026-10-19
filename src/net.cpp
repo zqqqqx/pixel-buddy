@@ -32,6 +32,8 @@ static const char* TAG = "net";
 static volatile bool online = false;
 static char ipStr[20] = "-";
 static char staSsid[33] = "", staPass[65] = "";
+static char hsSsid[33] = "", hsPass[65] = "";  // hotspot mode network
+static bool hsOn = false;
 static volatile bool setupOn = false;
 static char apSsid[33] = "", apPass[12] = "";
 static volatile int joinState = 0;  // setup page: 0 idle, 1 connecting, 2 connected, 3 failed
@@ -172,6 +174,13 @@ static void wifiStart() {
     nvs_get_str(h, "ssid", staSsid, &n);
     n = sizeof(staPass);
     nvs_get_str(h, "pass", staPass, &n);
+    n = sizeof(hsSsid);
+    nvs_get_str(h, "hs_ssid", hsSsid, &n);
+    n = sizeof(hsPass);
+    nvs_get_str(h, "hs_pass", hsPass, &n);
+    uint8_t on = 0;
+    nvs_get_u8(h, "hs_on", &on);
+    hsOn = on;
     nvs_close(h);
   }
   if (!staSsid[0] && WIFI_SSID[0]) {  // nothing from the setup: the network built into the firmware
@@ -184,6 +193,12 @@ static void wifiStart() {
       nvs_commit(h);
       nvs_close(h);
     }
+  }
+  hsOn = hsOn && hsSsid[0];
+  if (hsOn) {  // the home network stays stored, only this start uses the hotspot
+    memcpy(staSsid, hsSsid, sizeof(staSsid));
+    memcpy(staPass, hsPass, sizeof(staPass));
+    ESP_LOGW(TAG, "hotspot mode");
   }
   esp_netif_init();
   esp_event_loop_create_default();
@@ -228,9 +243,13 @@ void stopSetup() {
   if (online) stopAp();
 }
 
-bool saveWifi(const char* ssid, const char* pass) {
+static bool valid(const char* ssid, const char* pass) {
   if (!ssid[0] || strlen(ssid) > 32 || strlen(pass) > 64 || (pass[0] && strlen(pass) < 8)) return false;
-  if (strpbrk(ssid, "\"\\")) return false;  // it goes into JSON (status) as is
+  return !strpbrk(ssid, "\"\\");  // it goes into JSON (status) as is
+}
+
+bool saveWifi(const char* ssid, const char* pass) {
+  if (!valid(ssid, pass)) return false;
   nvs_handle_t h;
   if (nvs_open("pixel_wifi", NVS_READWRITE, &h) == ESP_OK) {
     nvs_set_str(h, "ssid", ssid);
@@ -247,6 +266,32 @@ bool saveWifi(const char* ssid, const char* pass) {
   esp_wifi_connect();
   ESP_LOGI(TAG, "setup: trying \"%s\"", ssid);
   return true;
+}
+
+bool hotspot() { return hsOn; }
+const char* hotspotSsid() { return hsSsid; }
+bool saveHotspot(const char* ssid, const char* pass) {
+  if (ssid[0] && !pass[0] && !strcmp(ssid, hsSsid)) pass = hsPass;  // the page never gets the password back
+  if (ssid[0] && !valid(ssid, pass)) return false;
+  nvs_handle_t h;
+  if (nvs_open("pixel_wifi", NVS_READWRITE, &h) != ESP_OK) return false;
+  char p[65];
+  snprintf(p, sizeof(p), "%s", pass);
+  snprintf(hsSsid, sizeof(hsSsid), "%s", ssid);
+  snprintf(hsPass, sizeof(hsPass), "%s", p);
+  nvs_set_str(h, "hs_ssid", hsSsid);
+  nvs_set_str(h, "hs_pass", hsPass);
+  if (!ssid[0]) nvs_set_u8(h, "hs_on", 0);
+  nvs_commit(h);
+  nvs_close(h);
+  return true;
+}
+void setHotspot(bool on) {
+  nvs_handle_t h;
+  if (nvs_open("pixel_wifi", NVS_READWRITE, &h) != ESP_OK) return;
+  nvs_set_u8(h, "hs_on", on);
+  nvs_commit(h);
+  nvs_close(h);
 }
 
 int scan(char* out, int cap) {

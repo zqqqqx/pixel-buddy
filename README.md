@@ -54,7 +54,7 @@ zweiten QR-Code mit der Adresse des Webinterfaces (auch http://pixel.local).
 | „Pixel“ (oder „Hallo ESP“) | Gespräch starten; ein kurzer Ton bestätigt |
 | Antippen während Pixel spricht | unterbricht ihn |
 | „stopp“, „Ruhe“, „nix“ … | beendet das Gespräch |
-| BOOT 5× schnell | Menü: Neustart, Ausschalten, Werkseinstellung |
+| BOOT 5× schnell | Menü: Neustart, Hotspot-Modus, Ausschalten, Werkseinstellung |
 | BOOT kurz / lang | nächste Animation / nächstes Farbschema |
 | Webinterface → System | Chat (auch tippen), Firmware-Update über WLAN, Aufnahmen fürs Aktivierungswort |
 
@@ -98,6 +98,9 @@ Weitere Extras:
   auch per Sprache abrufbar.
 - Charakter als Datei sichern und laden; „Rückgängig“ nach dem Übernehmen einer Persönlichkeit.
 - Vor jedem Firmware-Update sichert Pixel die Einstellungen auf der SD-Karte (Gerät → „Sicherung wiederherstellen“).
+- Unterwegs: im 5×-Menü „Hotspot-Modus“ – Pixel verbindet sich dann mit dem Netz aus Gerät → „Unterwegs (Hotspot)“,
+  z.B. dem Hotspot deines Handys. Smart-Home-Befehle beantwortet er dort nur mit „geht nur zu Hause“, automatische
+  Updates warten bis er wieder im Heimnetz ist.
 
 ## Updates
 

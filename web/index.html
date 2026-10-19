@@ -362,6 +362,11 @@ details.more summary{cursor:pointer;color:var(--acc);font-size:13.5px;margin:6px
     </div></div>
     <div class="card"><h3>Status</h3><dl id="st"></dl><p class="hint" id="wifiInfo" style="margin-top:12px"></p>
       <p class="hint">Anderes WLAN: BOOT-Taste 5× schnell drücken → „Werkseinstellung“, dann zeigt Pixel einen QR-Code.</p></div>
+    <div class="card"><h3>Unterwegs (Hotspot)</h3><p class="hint">Zum Mitnehmen: Pixel verbindet sich statt mit deinem WLAN mit diesem Netz, z.B. dem Hotspot deines Handys. Einschalten: BOOT-Taste 5× schnell drücken → „Hotspot-Modus“, zurück mit „Zum Heimnetz“. Unterwegs gehen Smart-Home-Befehle nicht, und automatische Updates warten bis zu Hause (mobile Daten).</p>
+      <div class="fields" style="grid-template-columns:1fr"><label class="f">Netzname<input type="text" id="hsSsid" maxlength="32" autocomplete="off" placeholder="z.B. iPhone von …"></label>
+      <label class="f">Passwort<input type="password" id="hsPass" maxlength="64" autocomplete="new-password"></label></div>
+      <div class="row2" style="margin-top:12px"><button class="btn" onclick="hsSave()">Speichern</button><button class="btn ghost" onclick="$('#hsSsid').value='';hsSave()">Entfernen</button></div>
+      <p class="hint" id="hsInfo" style="margin-top:10px"></p></div>
     <div class="card"><h3>Aktivierungswort verbessern</h3><p class="hint">Auf „Pixel sagen“ klicken und direkt danach „Pixel“ sagen – gern 20 Mal, laut, leise, nah, fern. „Umgebung“ nimmt 10 s normale Geräusche auf. Außerdem sammelt Pixel bei jeder Aktivierung selbst: das gesagte „Pixel“, wenn danach gesprochen wurde, sonst die Aufnahme als Fehlauslösung (höchstens 800 Aufnahmen). Danach am PC <code>wakeword/retrain.sh</code>.</p>
       <div class="row2"><button class="btn" onclick="kwsRec('pos')">Pixel sagen</button><button class="btn ghost" onclick="kwsRec('bg')">Umgebung (10 s)</button><button class="btn ghost" onclick="kwsClear()">Automatische löschen</button></div>
       <p class="hint" id="kwsInfo" style="margin-top:12px">…</p>
@@ -586,11 +591,17 @@ function status(){api('GET','/api/status').then(s=>{
   $('#foot').textContent=`${s.ip} · ${s.slot}`;$('#prodVer').textContent=s.version||'';
   $('#pUp').style.display=s.update?'':'none';$('#pUp').textContent=`✨ Update ${s.update} verfügbar`;
   $('#cost').innerHTML=[['Heute','$'+s.usd_today.toFixed(2)],['Diesen Monat','$'+s.usd_month.toFixed(2)]].map(([a,b])=>`<dt>${a}</dt><dd>${b}</dd>`).join('');
+  if(!hsSeen){hsSeen=true;$('#hsSsid').value=s.hotspot_ssid||'';$('#hsPass').placeholder=s.hotspot_ssid?'unverändert':''}
+  $('#hsInfo').textContent=s.hotspot?'Pixel ist gerade im Hotspot-Modus unterwegs.':s.hotspot_ssid?'Eingerichtet – einschalten im 5×-Menü.':'';
+  if(s.hotspot)$('#pWifi').innerHTML=`<span class="dot"></span>Hotspot ${s.rssi} dBm`;
   $('#wifiInfo').textContent=s.setup?'Einrichtung läuft – QR-Code auf dem Display scannen.':`Verbunden mit „${s.ssid}“ (${s.rssi} dBm), Adresse ${s.ip}.`;
   $('#st').innerHTML=[['Laufzeit',Math.floor(s.uptime/3600)+' h '+Math.floor(s.uptime%3600/60)+' min'],['Freier RAM',Math.round(s.heap/1024)+' KB intern · '+Math.round(s.psram/1024)+' KB PSRAM'],['Nachtmodus',s.night?'aktiv':'aus'],['Firmware',s.build+' ('+s.slot+')']].map(([a,b])=>`<dt>${a}</dt><dd>${b}</dd>`).join('');
   status.n=(status.n||0)+1;if($('#dash').classList.contains('on')&&(s.live!=='idle'||status.n%5===0))loadLog();
  }).catch(()=>{$('#pState').innerHTML='<span class="dot"></span>offline';$('#pState').className='pill bad';if(++fails>=2)$('#offline').classList.add('on')})}
 // ---------- home, wake word, chat, system
+let hsSeen=false;
+function hsSave(){const ssid=$('#hsSsid').value.trim();api('POST','/api/hotspot',{ssid,pass:$('#hsPass').value}).then(j=>{
+  if(!j.ok)return toast(j.error);$('#hsPass').value='';$('#hsPass').placeholder=ssid?'unverändert':'';toast(ssid?'Hotspot gespeichert ✓':'Hotspot entfernt')})}
 function haTest(){const e=$('#ha');e.style.display='block';e.textContent='verbinde …';
   api('GET','/api/ha/test').then(j=>{e.textContent=j.devices<0?'Keine Verbindung – Adresse und Token prüfen.':j.devices+' Geräte gefunden:\n\n'+j.list.split('\n').map(l=>l.split('|').slice(0,2).reverse().join('  ·  ')).join('\n')})}
 function lights(){api('GET','/api/ha/test').then(j=>{if(j.devices<0)return;

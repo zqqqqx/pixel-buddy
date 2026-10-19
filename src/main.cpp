@@ -534,16 +534,17 @@ static void runLive() {
   last = p;
 }
 
-// ---- BOOT pressed 5x quickly: a menu on the display (restart, switch off, factory settings)
+// ---- BOOT pressed 5x quickly: a menu on the display (restart, hotspot mode, switch off, factory settings)
 static bool menuOpen = false;
-static int menuStage = 0;  // 0 main, 1 "really reset?"
-static int64_t menuAt = 0;
+static int menuStage = 0;  // 0 main, 1 "really reset?", 2 "no hotspot configured", 3 restarting
+static int64_t menuAt = 0, restartAt = 0;
 static void menuShow(int stage) {
   menuStage = stage;
   menuAt = esp_timer_get_time();
   if (stage == 0) {
-    static const char* const M[] = {"Neustart", "Ausschalten", "Werkseinstellung", "Zurueck"};
-    screen::menu("Pixel", M, 4, 2);
+    const char* const M[] = {"Neustart", net::hotspot() ? "Zum Heimnetz" : "Hotspot-Modus", "Ausschalten",
+                             "Werkseinstellung", "Zurueck"};
+    screen::menu("Pixel", M, 5, 3);
   } else {
     static const char* const M[] = {"Ja, loeschen", "Abbrechen"};
     screen::menu("Wirklich?", M, 2, 0);
@@ -564,15 +565,31 @@ static void factoryReset() {
   vTaskDelay(pdMS_TO_TICKS(300));
   esp_restart();
 }
+// hotspot mode: another network (e.g. a phone's hotspot) to take Pixel along; a restart switches cleanly
+static void toggleHotspot() {
+  if (!net::hotspot() && !net::hotspotSsid()[0]) {
+    menuStage = 2;  // a tap goes back to the menu
+    screen::splash("KEIN HOTSPOT", "erst im Dashboard");
+    return;
+  }
+  net::setHotspot(!net::hotspot());
+  printf("hotspot mode %s\n", net::hotspot() ? "off" : "on");
+  screen::splash(net::hotspot() ? "HEIMNETZ" : "HOTSPOT", "starte neu ...");
+  menuStage = 3;
+  restartAt = esp_timer_get_time() + 1200000;  // the frames go on meanwhile and show it
+}
 static void menuTap(int x, int y) {
   menuAt = esp_timer_get_time();
   int i = screen::hit(x, y);
   if (menuStage == 0) {
     if (i == 0) esp_restart();
-    if (i == 1) shutdown();
-    if (i == 2) menuShow(1);
-    if (i == 3) menuClose();
-  } else {
+    if (i == 1) toggleHotspot();
+    if (i == 2) shutdown();
+    if (i == 3) menuShow(1);
+    if (i == 4) menuClose();
+  } else if (menuStage == 2) {
+    menuShow(0);
+  } else if (menuStage == 1) {
     if (i == 0) factoryReset();
     if (i == 1) menuShow(0);
   }
@@ -732,14 +749,14 @@ static void applySettings() {
 
 static void publishStatus(float fps) {
   static const char* PH[] = {"idle", "connecting", "waiting", "user", "responding"};
-  char j[600];
+  char j[700];
   const esp_app_desc_t* app = esp_app_get_description();
   snprintf(j, sizeof(j),
            "{\"ip\":\"%s\",\"ssid\":\"%s\",\"rssi\":%d,\"uptime\":%lld,\"fps\":%.0f,\"behavior\":\"%s\","
            "\"colorway\":\"%s\",\"live\":\"%s\",\"heap\":%u,\"psram\":%u,\"sd\":%s,\"build\":\"%s %s\","
            "\"usd_today\":%.3f,\"usd_month\":%.3f,\"timers\":%d,\"night\":%s,\"privacy\":%s,\"setup\":%s,"
            "\"ringing\":%s,\"slot\":\"%s\",\"display\":%d,\"battery\":%d,\"charging\":%s,\"version\":\"%s\","
-           "\"update\":\"%s\",\"heap_block\":%u}",
+           "\"update\":\"%s\",\"heap_block\":%u,\"hotspot\":%s,\"hotspot_ssid\":\"%s\"}",
            net::ip(), net::ssid(), net::rssi(), esp_timer_get_time() / 1000000, fps, eyes::currentName(),
            eyes::colorwayName(), PH[(int)live::phase()], (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM), sd::ok() ? "true" : "false", app->date, app->time,
@@ -748,7 +765,8 @@ static void publishStatus(float fps) {
            esp_ota_get_running_partition()->label, (int)(backlight * 100.f + 0.5f), battery::level(),
            battery::charging() ? "true" : "false", PIXEL_VERSION,
            update::state() == update::AVAILABLE ? update::latest() : "",
-           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), net::hotspot() ? "true" : "false",
+           net::hotspotSsid());
   web::setStatus(j);
 }
 
@@ -825,6 +843,7 @@ static void setupScreen() {
   static char shown[96] = "";
   char key[96];
   if (menuOpen) {
+    if (restartAt && esp_timer_get_time() > restartAt) esp_restart();
     if (esp_timer_get_time() - menuAt > 15000000) menuClose();  // nothing chosen: back to the eyes
     shown[0] = 0;
     return;
@@ -883,7 +902,7 @@ static void houseKeeping(int64_t now) {
   int nowMin = h * 60 + tmv.tm_min, late = (nowMin - upAt + 1440) % 1440;
   static int upDay = -1;
   if (settings::updateAuto() && t > 1700000000 && late < 30 && upDay != tmv.tm_yday && !live::active() && !ringUntil &&
-      !menuOpen && net::connected()) {
+      !menuOpen && net::connected() && !net::hotspot()) {  // not over a phone's mobile data
     upDay = tmv.tm_yday;
     printf("update: daily check\n");
     update::check(true);
@@ -948,6 +967,7 @@ static void frameTask(void*) {
     updUs += esp_timer_get_time() - u0;
     eyes::Rect r = eyes::dirtyRect();
     if (screen::active()) r = {0, 0, 0, 0};  // the setup page stays until it changes
+    if (screen::animating()) r = {0, 0, 240, 240};  // the menu flies in
     static uint32_t screenVer = 0;
     if (screen::version() != screenVer) {  // the setup page appeared / changed / went away: whole screen
       screenVer = screen::version();

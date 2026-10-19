@@ -20,6 +20,12 @@ bool saveWifi(const char* ssid, const char* pass);  // store and connect, false 
 int joinStatus();                                 // 0 idle, 1 connecting, 2 connected, 3 failed
 int scan(char* jsonOut, int cap);                 // nearby networks as a JSON array, strongest first
 
+// hotspot mode (BOOT 5x menu): another network, e.g. a phone's hotspot, instead of the home network
+bool hotspot();                                      // active since this start
+const char* hotspotSsid();                           // the configured one, "" = none
+bool saveHotspot(const char* ssid, const char* pass);  // "" forgets it; an empty password keeps the stored one
+void setHotspot(bool on);                            // stored, takes effect after a restart
+
 // captive portal DNS: length of a query up to the end of its first question, -1 if malformed
 inline int dnsQuestionEnd(const uint8_t* b, int n) {
   int i = 12;

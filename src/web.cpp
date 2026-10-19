@@ -322,6 +322,17 @@ static esp_err_t hWifiSave(httpd_req_t* r) {
   if (j) cJSON_Delete(j);
   return sendJson(r, ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"Netzname fehlt oder enthält \\\"/\\\\, oder Passwort zu kurz (mind. 8 Zeichen)\"}");
 }
+// hotspot mode network (switched on in the BOOT 5x menu); the password never goes back to the page
+static esp_err_t hHotspot(httpd_req_t* r) {
+  char* b = body(r);
+  cJSON* j = b ? cJSON_Parse(b) : nullptr;
+  free(b);
+  const cJSON* ss = cJSON_GetObjectItem(j, "ssid");
+  const cJSON* pw = cJSON_GetObjectItem(j, "pass");
+  bool ok = cJSON_IsString(ss) && net::saveHotspot(ss->valuestring, cJSON_IsString(pw) ? pw->valuestring : "");
+  if (j) cJSON_Delete(j);
+  return sendJson(r, ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"Netzname enthält \\\"/\\\\, oder Passwort zu kurz (mind. 8 Zeichen)\"}");
+}
 static esp_err_t hWifiStatus(httpd_req_t* r) {
   char j[200];
   snprintf(j, sizeof(j), "{\"state\":%d,\"ip\":\"%s\",\"ssid\":\"%s\",\"setup\":%s,\"key\":%s}", net::joinStatus(),
@@ -496,6 +507,7 @@ void start() {
       {"/api/wifi/scan", HTTP_GET, hWifiScan, nullptr},
       {"/api/wifi", HTTP_POST, guarded, (void*)hWifiSave},
       {"/api/wifi/status", HTTP_GET, hWifiStatus, nullptr},
+      {"/api/hotspot", HTTP_POST, guarded, (void*)hHotspot},
       {"/api/ota", HTTP_POST, guarded, (void*)hOta},
       {"/api/chat", HTTP_POST, guarded, (void*)hChat},
       {"/api/screen", HTTP_GET, hScreen, nullptr},

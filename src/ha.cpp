@@ -22,6 +22,8 @@ namespace ha {
 static const char* TAG = "ha";
 
 bool configured(const settings::Conv& c) { return c.haUrl[0] && c.haToken[0]; }
+// hotspot mode: Home Assistant is at home, out of reach. The tools stay and say so.
+static const char* AWAY = "Pixel ist im Hotspot-Modus unterwegs - das Smart Home geht nur zu Hause im Heimnetz.";
 
 // one request; response text (0-terminated) in resp, returns HTTP status or -1
 static int call(const settings::Conv& c, const char* method, const char* path, const char* body, char* resp, int cap) {
@@ -53,6 +55,10 @@ static int call(const settings::Conv& c, const char* method, const char* path, c
 
 int listDevices(const settings::Conv& c, char* out, int cap) {
   if (!configured(c)) return -1;
+  if (net::hotspot()) {
+    snprintf(out, cap, "(keine erreichbar: %s)", AWAY);
+    return 0;
+  }
   const char* tpl =
       "{\"template\":\"{% for s in states if s.domain in ['light','switch','cover','climate','fan','media_player',"
       "'lock','scene','script','input_boolean','vacuum','weather'] or (s.domain == 'sensor' and s.attributes.device_class "
@@ -103,7 +109,7 @@ static uint32_t kelvinRgb(double k) {  // rough white tone for the eyes: warm 20
 }
 
 bool weather(const settings::Conv& c, char* cond, int cap) {
-  if (!configured(c)) return false;
+  if (!configured(c) || net::hotspot()) return false;
   char out[64];
   const char* tpl = "{\"template\":\"{{ (states.weather | first).state if states.weather | list | count else '' }}\"}";
   if (call(c, "POST", "/api/template", tpl, out, sizeof(out)) != 200 || !out[0]) return false;
@@ -197,7 +203,7 @@ static void eventTask(void*) {
   for (;;) {
     vTaskDelay(pdMS_TO_TICKS(5000));
     settings::conv(c);
-    bool want = configured(c) && net::connected();
+    bool want = configured(c) && net::connected() && !net::hotspot();
     if (hws && (!want || wsStep == 0)) {  // gone, or the settings changed: start over
       esp_websocket_client_destroy(hws);
       hws = nullptr;
@@ -268,6 +274,10 @@ bool setLight(const settings::Conv& c, const cJSON* a, char* result, int cap, ui
   rgb = 0xFFC46E;
   anim = "light_on";
   const cJSON* e = cJSON_GetObjectItem(a, "entity_id");
+  if (configured(c) && net::hotspot()) {
+    snprintf(result, cap, "%s", AWAY);
+    return false;
+  }
   if (!configured(c) || !cJSON_IsString(e) || strncmp(e->valuestring, "light.", 6) || strlen(e->valuestring) >= 48) {
     snprintf(result, cap, configured(c) ? "entity_id muss eine light.* aus der Liste sein" : "Smart Home ist nicht eingerichtet.");
     return false;
@@ -356,6 +366,10 @@ bool control(const settings::Conv& c, const char* entity, const char* action, do
              char* result, int cap) {
   if (!configured(c)) {
     snprintf(result, cap, "Smart Home ist nicht eingerichtet.");
+    return false;
+  }
+  if (net::hotspot()) {
+    snprintf(result, cap, "%s", AWAY);
     return false;
   }
   char domain[32] = {0};

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "esp_attr.h"
+#include "esp_timer.h"
 #include "qrcode.h"
 
 namespace screen {
@@ -48,10 +49,13 @@ static const uint8_t FONT[95][5] = {
 static volatile bool on = false;
 static bool isMenu = false, isSplash = false;
 static volatile int splashPct = -1;
-static char items[4][24];
+static char items[5][24];
 static int nItems = 0, dangerItem = -1;
-static const int BTN_X0 = 18, BTN_X1 = 222, BTN_Y0 = 48, BTN_H = 40, BTN_GAP = 8;
+static const int BTN_X0 = 12, BTN_X1 = 228, BTN_Y0 = 44, BTN_H = 33, BTN_GAP = 6;  // up to 5 buttons
 static volatile uint32_t ver = 0;
+static int64_t menuT0 = 0;          // when the menu appeared: it flies in
+static volatile float animT = 9.f;  // seconds since then, taken once per frame (all bands alike)
+static const float MENU_IN = 0.5f;
 static char text[4][40];
 EXT_RAM_BSS_ATTR static uint8_t qr[64][64];  // modules (version <= 10 -> 57 x 57)
 static int qrN = 0;
@@ -66,10 +70,12 @@ static void grab(esp_qrcode_handle_t q) {
 void menu(const char* title, const char* const* it, int n, int danger) {
   snprintf(text[0], sizeof(text[0]), "%s", title);
   text[1][0] = text[2][0] = text[3][0] = 0;
-  nItems = n < 4 ? n : 4;
+  nItems = n < 5 ? n : 5;
   for (int i = 0; i < nItems; ++i) snprintf(items[i], sizeof(items[0]), "%s", it[i]);
   dangerItem = danger;
   qrN = 0;
+  menuT0 = esp_timer_get_time();
+  animT = 0.f;
   isSplash = false;
   isMenu = true;
   on = true;
@@ -114,6 +120,12 @@ void hide() {
   ver = ver + 1;
 }
 bool active() { return on; }
+bool animating() {
+  if (!on || !isMenu) return false;
+  float t = (esp_timer_get_time() - menuT0) * 1e-6f;
+  animT = t < MENU_IN ? t : MENU_IN;
+  return t < MENU_IN + 0.05f;  // one more frame at the end position
+}
 uint32_t version() { return ver; }
 
 // layout: title (scale 2) at the top, QR code in the middle, two text lines (scale 2) below
@@ -145,24 +157,6 @@ static inline uint16_t px(uint8_t r, uint8_t g, uint8_t b) {
   return v;
 }
 
-static void renderMenu(uint16_t* buf, int x0, int y0, int x1, int y1) {
-  const uint16_t BG = 0, FG = 0xFFFF, BTN = px(40, 46, 62), RED = px(200, 50, 64);
-  for (int y = y0; y < y1; ++y)
-    for (int x = x0; x < x1; ++x) {
-      uint16_t c = textPixel(text[0], 2, 14, x, y) ? FG : BG;
-      for (int i = 0; i < nItems; ++i) {
-        int by = BTN_Y0 + i * (BTN_H + BTN_GAP);
-        if (y < by || y >= by + BTN_H || x < BTN_X0 || x >= BTN_X1) continue;
-        // rounded corners (radius 8)
-        int dx = x < BTN_X0 + 8 ? BTN_X0 + 8 - x : x >= BTN_X1 - 8 ? x - (BTN_X1 - 9) : 0;
-        int dy = y < by + 8 ? by + 8 - y : y >= by + BTN_H - 8 ? y - (by + BTN_H - 9) : 0;
-        if (dx * dx + dy * dy > 64) continue;
-        c = textPixel(items[i], 2, by + (BTN_H - 14) / 2, x, y) ? FG : i == dangerItem ? RED : BTN;
-      }
-      *buf++ = c;
-    }
-}
-
 // brand colours (docs/brand.md)
 static const uint8_t CREAM[3] = {246, 243, 234}, BLUE[3] = {61, 107, 255}, MUTED[3] = {139, 148, 169},
                      TRACK[3] = {37, 43, 58};
@@ -173,6 +167,46 @@ static inline float sdPill(float x, float y, float hx, float hy) {
   float ox = qx > 0 ? qx : 0, oy = qy > 0 ? qy : 0;
   return sqrtf(ox * ox + oy * oy) + (qx > qy ? (qx < 0 ? qx : 0) : (qy < 0 ? qy : 0)) - r;
 }
+static inline float easeOut(float t) {
+  t = clamp01(t);
+  return 1.f - (1.f - t) * (1.f - t) * (1.f - t);
+}
+static inline void blend(float* c, const uint8_t* v, float a) {
+  for (int k = 0; k < 3; ++k) c[k] += (v[k] - c[k]) * a;
+}
+// The menu: brand night background, title with a short blue line, the buttons as pills. They fly in one
+// after the other (rise and fade, ease out). The last button is the way back: outlined only.
+static void renderMenu(uint16_t* buf, int x0, int y0, int x1, int y1) {
+  static const uint8_t NIGHT[3] = {11, 13, 18}, CARD[3] = {27, 32, 46}, ROUGE[3] = {255, 104, 156},
+                       ROUGE_BG[3] = {64, 24, 42}, LINE[3] = {60, 68, 90};
+  const float t = animT, hw = (BTN_X1 - BTN_X0) / 2.f, hh = BTN_H / 2.f;
+  const float bg = easeOut(t / 0.18f), ta = easeOut(t / 0.25f);
+  const int titleY = 12 - (int)lroundf((1.f - ta) * 8.f);
+  float ba[5];
+  int by[5];
+  for (int i = 0; i < nItems; ++i) {
+    float e = easeOut((t - 0.08f - i * 0.05f) / 0.26f);
+    ba[i] = e;
+    by[i] = BTN_Y0 + i * (BTN_H + BTN_GAP) + (int)lroundf((1.f - e) * 16.f);
+  }
+  for (int y = y0; y < y1; ++y)
+    for (int x = x0; x < x1; ++x) {
+      float c[3] = {NIGHT[0] * bg, NIGHT[1] * bg, NIGHT[2] * bg};
+      if (textPixel(text[0], 2, titleY, x, y)) blend(c, CREAM, ta);
+      if (y >= titleY + 19 && y < titleY + 22 && x >= 108 && x < 132) blend(c, BLUE, ta);
+      for (int i = 0; i < nItems; ++i) {
+        if (ba[i] <= 0.f || y < by[i] - 1 || y > by[i] + BTN_H) continue;
+        float d = sdPill(x + 0.5f - 120.f, y + 0.5f - (by[i] + hh), hw, hh);
+        bool back = i == nItems - 1 && i != dangerItem;
+        const uint8_t* fg = i == dangerItem ? ROUGE : back ? MUTED : CREAM;
+        float a = back ? clamp01(1.f - fabsf(d + 0.75f)) : clamp01(0.5f - d);  // outline 1.5 px / filled
+        if (a > 0.f) blend(c, back ? LINE : i == dangerItem ? ROUGE_BG : CARD, a * ba[i]);
+        if (textPixel(items[i], 2, by[i] + (BTN_H - 14) / 2, x, y)) blend(c, fg, ba[i]);
+      }
+      *buf++ = px((uint8_t)c[0], (uint8_t)c[1], (uint8_t)c[2]);
+    }
+}
+
 // the logo: two eyes looking up to the right, the right one a little bigger (Pixel is never quite symmetric)
 static void logoPixel(int x, int y, float* c) {
   for (int i = 0; i < 2; ++i) {
