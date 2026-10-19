@@ -9,7 +9,7 @@ g++ -O2 -std=c++17 -Isrc sim/sim.cpp src/eyes.cpp -o "$T/sim"
 cat > "$T/face.js" <<'JS'
 const fs=require('fs');const src=fs.readFileSync('web/index.html','utf8');
 const js=src.match(/<script>([\s\S]*)<\/script>/)[1];
-const pre=js.match(/const CW=\{[^\n]*\n[^\n]*\nconst PRESETS=\[[\s\S]*?\n\];/)[0];
+const pre='const PRESETS='+fs.readFileSync('src/presets.h','utf8').match(/R"PRESETS\(([\s\S]*)\)PRESETS"/)[1]+';';
 const fns=js.match(/function shapeK[\s\S]*?\n  ctx.putImageData\(img,0,0\)\}/)[0];
 eval(pre+'\n'+fns+`
 for(const p of PRESETS){const cv={width:240,height:165,getContext(){return{createImageData(w,h){return{data:new Uint8ClampedArray(w*h*4)}},

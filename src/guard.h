@@ -7,27 +7,40 @@
 
 namespace guard {
 
-// said: the person's words in lower case. Entries "a+b": both parts somewhere ("starte dich bitte neu").
+// said: the person's words in lower case. Entries "a+b": both parts somewhere ("starte dich bitte neu");
+// "=ab": the whole utterance, letters only ("Ausschalten." alone, but not "Licht ausschalten").
 inline bool askedFor(const char* action, const char* said) {
   static const struct {
     const char* action;
-    const char* words[10];
+    const char* words[14];
   } W[] = {
       {"restart", {"start+neu", "neustart", "restart", "reboot"}},
-      {"shutdown", {"dich+aus", "fahr+runter", "herunterfahr", "shutdown"}},  // not "mach das licht aus"
+      {"shutdown", {"dich+aus", "fahr+runter", "herunterfahr", "shutdown", "=ausschalten", "=pixelausschalten",
+                    "=ausschaltenbitte", "=bitteausschalten", "=schaltaus", "=schalteaus", "=ausmachen", "=gehaus"}},
       // "vergiss es" means "never mind": deleting needs to name what goes
       {"clear_history", {"verlauf+l\xc3\xb6sch", "verlauf+loesch", "verlauf+vergiss", "protokoll+l\xc3\xb6sch",
                          "protokoll+loesch", "gespr\xc3\xa4" "ch+l\xc3\xb6sch", "gespraech+loesch", "vergiss+alles"}},
       {"forget_all", {"vergiss+alles", "l\xc3\xb6sch+alles", "loesch+alles"}},
       // installing restarts it: only on "installier ...", "aktualisier dich", "mach / spiel / lad das update"
       {"update_install", {"installier", "aktualisier", "update+mach", "update+spiel", "update+lad", "update+starte"}},
+      // a personality's way of talking replaces the own system prompt: only when the person says so
+      {"persona", {"rede", "sprich", "sprech", "klingen", "klingst", "ton"}},
       // "ruhe" ends a conversation, it must not switch off listening
       {"privacy", {"h\xc3\xb6r", "hoer", "zuh\xc3\xb6r", "privat", "mikro", "lausch"}},
   };
+  char letters[64];
+  int n = 0;
+  for (const char* q = said; *q && n < (int)sizeof(letters) - 1; ++q)
+    if (*q >= 'a' && *q <= 'z') letters[n++] = *q;
+  letters[n] = 0;
   for (auto& w : W) {
     if (strcmp(w.action, action)) continue;
     for (const char* k : w.words) {
       if (!k) break;
+      if (k[0] == '=') {
+        if (!strcmp(letters, k + 1)) return true;
+        continue;
+      }
       char part[24];
       bool all = true;
       for (const char* q = k; *q && all;) {

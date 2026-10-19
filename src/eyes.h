@@ -58,6 +58,7 @@ int behaviorIndex(const char* name);   // -1 if unknown
 
 void init(uint32_t seed);
 void update(float dt);                  // advance animation, builds the frame snapshot
+float fps();                            // frames per second right now (smoothed)
 void touch(bool down, int x, int y);    // call every frame with the current touch state
 void buttonClick();                     // next animation (demo)
 void buttonLong();                      // next colorway

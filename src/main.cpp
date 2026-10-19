@@ -534,22 +534,51 @@ static void runLive() {
   last = p;
 }
 
-// ---- BOOT pressed 5x quickly: a menu on the display (restart, hotspot mode, switch off, factory settings)
+// ---- BOOT pressed 5x quickly: the menu (restart, hotspot mode, switch off, factory settings). Every
+// action asks once more, so a stray touch never does anything; it goes after a short goodbye on the display.
 static bool menuOpen = false;
-static int menuStage = 0;  // 0 main, 1 "really reset?", 2 "no hotspot configured", 3 restarting
-static int64_t menuAt = 0, restartAt = 0;
-static void menuShow(int stage) {
-  menuStage = stage;
+static int menuQ = -1;  // the question on screen (index of the tile), -1 the tiles
+static int64_t menuAt = 0, actAt = 0;
+static int act = -1;
+static const uint32_t C_BLUE = 0x3D6BFF, C_MINT = 0x38D39F, C_LILAC = 0xA87BFF, C_ROUGE = 0xFF689C;
+static void menuStatus(char* s, int cap) {
+  int b = battery::level();
+  char bat[24] = "";
+  if (b >= 0) snprintf(bat, sizeof(bat), "  ·  %d %%%s", b, battery::charging() ? "+" : "");
+  snprintf(s, cap, "Pixel Buddy %s  ·  %s%s", PIXEL_VERSION, net::hotspot() ? "Hotspot" : "WLAN", bat);
+}
+static void menuShow() {
+  char st[56];
+  menuStatus(st, sizeof(st));
+  const char* labels[] = {"Neustart", net::hotspot() ? "Heimnetz" : "Hotspot", "Aus", "Reset"};
+  const int icons[] = {screen::IC_RESTART, net::hotspot() ? screen::IC_HOME : screen::IC_HOTSPOT, screen::IC_POWER,
+                       screen::IC_RESET};
+  const uint32_t cols[] = {C_BLUE, C_MINT, C_LILAC, C_ROUGE};
+  screen::menu(st, labels, icons, cols, 4);
+  menuQ = -1;
   menuAt = esp_timer_get_time();
-  if (stage == 0) {
-    const char* const M[] = {"Neustart", net::hotspot() ? "Zum Heimnetz" : "Hotspot-Modus", "Ausschalten",
-                             "Werkseinstellung", "Zurueck"};
-    screen::menu("Pixel", M, 5, 3);
-  } else {
-    static const char* const M[] = {"Ja, loeschen", "Abbrechen"};
-    screen::menu("Wirklich?", M, 2, 0);
-  }
   menuOpen = true;
+}
+static void menuAsk(int k) {
+  char st[56], line[80];
+  menuStatus(st, sizeof(st));
+  menuQ = k;
+  if (k == 0) {
+    screen::ask(st, screen::IC_RESTART, C_BLUE, "Neu starten?", "Gleich wieder da.", "Ja", 0);
+  } else if (k == 1 && !net::hotspot() && !net::hotspotSsid()[0]) {
+    screen::ask(st, screen::IC_HOTSPOT, C_MINT, "Kein Hotspot",
+                "Im Webinterface:\nGerät > Unterwegs", nullptr, 1);
+  } else if (k == 1 && !net::hotspot()) {
+    snprintf(line, sizeof(line), "Verbinde mich mit\n%s", net::hotspotSsid());
+    screen::ask(st, screen::IC_HOTSPOT, C_MINT, "Zum Hotspot?", line, "Ja", 0);
+  } else if (k == 1) {
+    screen::ask(st, screen::IC_HOME, C_MINT, "Zum Heimnetz?", "Zurück in dein\nWLAN zu Hause.", "Ja", 0);
+  } else if (k == 2) {
+    screen::ask(st, screen::IC_POWER, C_LILAC, "Ausschalten?", "Wieder an:\nTaste BOOT drücken.", "Ja", 2);
+  } else {
+    screen::ask(st, screen::IC_RESET, C_ROUGE, "Alles löschen?",
+                "Setzt alles zurück:\nWLAN, Key, Verlauf", "Löschen", 1);
+  }
 }
 static void menuClose() {
   menuOpen = false;
@@ -565,33 +594,30 @@ static void factoryReset() {
   vTaskDelay(pdMS_TO_TICKS(300));
   esp_restart();
 }
-// hotspot mode: another network (e.g. a phone's hotspot) to take Pixel along; a restart switches cleanly
-static void toggleHotspot() {
-  if (!net::hotspot() && !net::hotspotSsid()[0]) {
-    menuStage = 2;  // a tap goes back to the menu
-    screen::splash("KEIN HOTSPOT", "erst im Dashboard");
-    return;
+// yes: a goodbye on the display, the frames go on meanwhile, then it happens (setupScreen)
+static void menuDo(int k) {
+  if (k == 1) {
+    net::setHotspot(!net::hotspot());
+    printf("hotspot mode %s\n", net::hotspot() ? "off" : "on");
   }
-  net::setHotspot(!net::hotspot());
-  printf("hotspot mode %s\n", net::hotspot() ? "off" : "on");
-  screen::splash(net::hotspot() ? "HEIMNETZ" : "HOTSPOT", "starte neu ...");
-  menuStage = 3;
-  restartAt = esp_timer_get_time() + 1200000;  // the frames go on meanwhile and show it
+  static const char* const TITLE[] = {"BIS GLEICH!", "", "GUTE NACHT", "ALLES NEU"};
+  static const char* const LINE[] = {"starte neu ...", "starte neu ...", "", "lösche ..."};
+  screen::splash(k == 1 ? (net::hotspot() ? "HEIMNETZ" : "HOTSPOT") : TITLE[k], LINE[k]);
+  act = k;
+  actAt = esp_timer_get_time() + 1300000;
 }
-static void menuTap(int x, int y) {
+static void menuTap(int i) {
   menuAt = esp_timer_get_time();
-  int i = screen::hit(x, y);
-  if (menuStage == 0) {
-    if (i == 0) esp_restart();
-    if (i == 1) toggleHotspot();
-    if (i == 2) shutdown();
-    if (i == 3) menuShow(1);
-    if (i == 4) menuClose();
-  } else if (menuStage == 2) {
-    menuShow(0);
-  } else if (menuStage == 1) {
-    if (i == 0) factoryReset();
-    if (i == 1) menuShow(0);
+  if (i == screen::HIT_CLOSE) {
+    menuClose();
+  } else if (i == screen::HIT_EYES) {
+    screen::poke();
+  } else if (menuQ < 0) {
+    if (i >= 0) menuAsk(i);
+  } else if (i == 1) {
+    menuDo(menuQ);
+  } else if (i == 0) {
+    menuShow();  // no (or OK): back to the tiles
   }
 }
 
@@ -602,10 +628,23 @@ static void pollInputs() {
   bool down = touchRead(x, y);
   if (down) activity();
   if (down && tpDebug && !wasDown) printf("touch down x=%d y=%d\n", x, y);
-  if (down && !wasDown && menuOpen) {
-    menuTap(x, y);
-    wasDown = down;
-    return;
+  if (menuOpen) {  // pressed where the finger lands, done where it lets go (slide away to cancel)
+    static int pressI = -1, lx = 0, ly = 0;
+    static bool held = false;
+    if (down) {
+      lx = x;
+      ly = y;
+      menuAt = esp_timer_get_time();
+      screen::lookAt(x, y);
+      if (!held) pressI = screen::hit(x, y);
+      screen::press(screen::hit(x, y) == pressI ? pressI : -1);
+    } else if (held) {
+      screen::press(-1);
+      if (pressI != -1 && act < 0 && screen::hit(lx, ly) == pressI) menuTap(pressI);
+      pressI = -1;
+    }
+    held = down;
+    down = false;  // nothing below sees the touch (the eyes are hidden)
   }
   if (down && !wasDown) {
     if (screen::active()) net::stopSetup();  // setup page shown although online: a tap closes it
@@ -649,17 +688,20 @@ static void pollInputs() {
     ringStop(true);
   } else if (b && pressed && !longFired && now - pressT > 700000) {
     longFired = true;
-    eyes::buttonLong();
+    if (!menuOpen) eyes::buttonLong();
   } else if (!b && pressed) {
     pressed = false;
     if (!longFired && now - pressT > 30000) {
       clicks = now - lastClick < 600000 ? clicks + 1 : 1;
       lastClick = now;
-      if (clicks >= 5) {
+      if (menuOpen) {  // a press while the menu is open closes it
+        clicks = 0;
+        if (act < 0) menuClose();
+      } else if (clicks >= 5) {
         clicks = 0;
         printf("BOOT 5x: menu\n");
-        menuShow(0);
-      } else if (!menuOpen) {
+        menuShow();
+      } else {
         eyes::buttonClick();
       }
     }
@@ -675,13 +717,17 @@ static void pollInputs() {
         printf("  %c = %s\n", k < 10 ? '0' + k : 'A' + k - 10, eyes::behaviorName(k));
       printf("  n = next, c = next colour, t = toggle touch log, m = toggle mic log, b = benchmark\n"
              "  w = as if \"Pixel\" was heard (incl. the recording), p = CPU time per task since the last 'p'\n"
-             "  ! = cycle through the error animations\n");
+             "  ! = cycle through the error animations, # = the BOOT menu (1-4 its questions)\n");
+    } else if (menuOpen && c >= '1' && c <= '4') {
+      menuAsk(c - '1');
     } else if (c >= '0' && c <= '9') {
       eyes::trigger(c - '0');
     } else if (c >= 'A' && c <= 'Z') {
       eyes::trigger(10 + c - 'A');
     } else if (c == 'w') {
       mic::fakeWake();
+    } else if (c == '#') {
+      menuShow();
     } else if (c == '!') {
       static int k = 0;
       const char* E[] = {"offline", "quota", "cant", "huh", "locked", "glitch"};
@@ -780,7 +826,8 @@ static uint32_t scale(uint32_t c, float k) {
 }
 static void ledsTick(int64_t now) {
   int mode, bright;
-  settings::leds(mode, bright);
+  uint32_t own;
+  settings::leds(mode, bright, own);
   float t = now * 1e-6f, pulse = 0.55f + 0.45f * sinf(t * 6.2832f);
   uint32_t a = 0, b = 0;
   if (mode > 0) {
@@ -789,6 +836,7 @@ static void ledsTick(int64_t now) {
     uint32_t iris = lk.colorway >= 0 ? eyes::colorwayColor(lk.colorway, 1) : lk.iris;
     if ((iris >> 16 & 255) + (iris >> 8 & 255) + (iris & 255) < 120)  // dark iris: the accent colour
       iris = lk.colorway >= 0 ? eyes::colorwayColor(lk.colorway, 2) : lk.accent;
+    if (own) iris = own;  // an own LED colour instead of the eyes'
     const char* beh = eyes::currentName();
     live::Phase ph = live::phase();
     static const struct {
@@ -843,8 +891,12 @@ static void setupScreen() {
   static char shown[96] = "";
   char key[96];
   if (menuOpen) {
-    if (restartAt && esp_timer_get_time() > restartAt) esp_restart();
-    if (esp_timer_get_time() - menuAt > 15000000) menuClose();  // nothing chosen: back to the eyes
+    if (act >= 0 && esp_timer_get_time() > actAt) {
+      if (act == 2) shutdown();
+      if (act == 3) factoryReset();
+      esp_restart();  // restart, or the other network
+    }
+    if (act < 0 && esp_timer_get_time() - menuAt > 20000000) menuClose();  // nothing chosen: back to the eyes
     shown[0] = 0;
     return;
   }
@@ -967,7 +1019,8 @@ static void frameTask(void*) {
     updUs += esp_timer_get_time() - u0;
     eyes::Rect r = eyes::dirtyRect();
     if (screen::active()) r = {0, 0, 0, 0};  // the setup page stays until it changes
-    if (screen::animating()) r = {0, 0, 240, 240};  // the menu flies in
+    int mx0, my0, mx1, my1;
+    if (screen::animating(mx0, my0, mx1, my1)) r = {mx0, my0, mx1, my1};  // the menu: pop-ins, the eyes
     static uint32_t screenVer = 0;
     if (screen::version() != screenVer) {  // the setup page appeared / changed / went away: whole screen
       screenVer = screen::version();

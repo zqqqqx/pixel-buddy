@@ -21,12 +21,18 @@ int main() {
   assert(!askedFor("restart", "wie spät ist es?"));
   assert(askedFor("shutdown", "schalte dich bitte aus"));
   assert(!askedFor("shutdown", "mach das licht aus"));
+  assert(askedFor("shutdown", "ausschalten."));
+  assert(askedFor("shutdown", "pixel, ausschalten!"));
+  assert(!askedFor("shutdown", "licht ausschalten"));
+  assert(!askedFor("shutdown", "kannst du das radio ausschalten?"));
   assert(askedFor("clear_history", "lösch den verlauf"));
   assert(!askedFor("clear_history", "ach, vergiss es"));
   assert(askedFor("clear_history", "lösch bitte das gespräch"));
   assert(askedFor("forget_all", "vergiss alles über mich"));
   assert(askedFor("privacy", "hör bitte nicht mehr zu"));
   assert(!askedFor("privacy", "ruhe jetzt"));
+  assert(askedFor("persona", "nimm die eule und rede auch so"));
+  assert(!askedFor("persona", "wechsle auf den fertigen charakter eule."));
   assert(askedFor("status", "egal"));  // not sensitive
 
   // brightness / volume schedule: the latest entry so far, before the first one of the day yesterday's last

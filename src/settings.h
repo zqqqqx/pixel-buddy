@@ -38,7 +38,7 @@ void look(eyes::Look& out);
 void conv(Conv& out);
 const char* apiKey();                // OpenAI key: from the settings, else secrets.h
 int brightness();                    // 0..100
-void leds(int& mode, int& bright);   // LEDs: 0 off, 1 status, 2 status + glow; brightness 0..100
+void leds(int& mode, int& bright, uint32_t& color);  // 0 off, 1 status, 2 status + glow; 0..100; 0xRRGGBB, 0 = eyes
 int fps();
 int displayOffMin();
 bool updateAuto();                   // install new versions from GitHub by itself

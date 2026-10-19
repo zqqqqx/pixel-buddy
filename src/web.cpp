@@ -132,6 +132,20 @@ static esp_err_t hWake(httpd_req_t* r) {
   return sendJson(r, "{\"ok\":true}");
 }
 static esp_err_t hLog(httpd_req_t* r) {
+  char q[16] = "";
+  if (httpd_req_get_url_query_str(r, q, sizeof(q)) == ESP_OK && strstr(q, "all")) {  // the whole log, to download
+    httpd_resp_set_type(r, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(r, "Content-Disposition", "attachment; filename=\"pixel-gespraeche.txt\"");
+    static char chunk[4096];
+    for (const char* p : {"/sdcard/pixel/chat.old.log", "/sdcard/pixel/chat.log"}) {
+      FILE* f = fopen(p, "rb");
+      if (!f) continue;
+      size_t n;
+      while ((n = fread(chunk, 1, sizeof(chunk), f)) > 0) httpd_resp_send_chunk(r, chunk, n);
+      fclose(f);
+    }
+    return httpd_resp_send_chunk(r, nullptr, 0);
+  }
   const long cap = 24 * 1024;
   char* t = (char*)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM);
   sd::readTail("/sdcard/pixel/chat.log", t, cap);

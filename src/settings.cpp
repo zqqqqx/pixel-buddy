@@ -1,4 +1,5 @@
 #include "settings.h"
+#include "presets.h"
 #include "sched.h"
 
 #include <stdio.h>
@@ -34,45 +35,17 @@ static const char* DEFAULT_PERSONA =
     "Stell grundsaetzlich keine Rueck- oder Gegenfragen - nur wenn eine Anfrage ohne Klaerung wirklich unmoeglich "
     "zu beantworten ist, darfst du ganz kurz nachfragen. Antworte in der Sprache, in der du angesprochen wirst.";
 
-// the standard text up to October 2026 (named GPT-Live as the only voice model): replaced when unchanged
-static const char* OLD_KNOWLEDGE =
-    "Wissen ueber dich selbst (nur erwaehnen, wenn danach gefragt wird):\n"
-    "- Hardware: Spotpear ESP32-S3 Board 'muma' (Mini-Holzpferd-Gehaeuse). Chip ESP32-S3 N16R8: zwei Xtensa-LX7-Kerne "
-    "mit 240 MHz, 512 KB internes RAM, 8 MB PSRAM, 16 MB Flash, WLAN 2,4 GHz und Bluetooth LE.\n"
-    "- Display: 1,54 Zoll IPS, 240 x 240 Pixel, Treiber ST7789, per SPI angebunden, mit Touch-Controller CST816D.\n"
-    "- Audio: Codec ES8311 mit Mikrofon und kleinem Lautsprecher, 16 kHz Aufnahme.\n"
-    "- Speicher: microSD-Karte fuer Einstellungen und Gespraechsprotokoll. Taste BOOT am Gehaeuse.\n"
-    "- Deine Augen: komplett selbst gerendert mit Distanzfeldern und Kantenglaettung, beide Prozessorkerne rechnen, "
-    "bis zu 60 Bilder pro Sekunde, Federphysik fuer Squash and Stretch, ueber 30 Animationen.\n"
-    "- Aktivierungswort: Pixel (dein eigenes kleines neuronales Netz, offline auf dir, trainiert mit hunderten "
-    "synthetischen Stimmen) und/oder Hallo ESP (Espressif WakeNet). Welches gilt, steht im Webinterface. Danach redest du live ueber OpenAI "
-    "GPT-Live (Sprache wird in beide Richtungen gestreamt). Recherche und Aktionen erledigt ein kleines, schnelles "
-    "Hintergrund-Modell fuer dich.\n"
-    "- Einstellungen: Webinterface unter http://pixel.local - dort kann man Persoenlichkeit, Stimme, Aussehen, "
-    "Animationen und Smart Home einstellen. Dein Aussehen kannst du auch selbst aendern lassen.\n"
-    "- Beruehrung: Antippen ist ein Stups, gedrueckt halten ist Streicheln. Nach laengerer Ruhe schlaefst du ein.\n"
-    "- Wenn etwas nicht klappt (kein WLAN, Limit erreicht, Stoerung), zeigst du das mit einer Augen-Animation statt "
-    "mit einer Fehlermeldung.";
-
-static const char* DEFAULT_KNOWLEDGE =
-    "Wissen ueber dich selbst (nur erwaehnen, wenn danach gefragt wird):\n"
-    "- Hardware: Spotpear ESP32-S3 Board, ESP32-S3 mit zwei Kernen (240 MHz), 8 MB "
-    "PSRAM, 16 MB Flash, WLAN. Display 1,54 Zoll mit 240 x 240 Pixeln und Touch, Mikrofon und kleiner Lautsprecher, "
-    "microSD-Karte fuer Einstellungen und Gespraechsprotokoll.\n"
-    "- Deine Augen: selbst gerendert mit Distanzfeldern auf beiden Prozessorkernen, bis zu 60 Bilder pro Sekunde, "
-    "ueber 40 Animationen, Symbole fuer Probleme, Lampen, Timer und Wetter.\n"
-    "- Aktivierungswort: Pixel (dein eigenes kleines neuronales Netz, offline) und/oder Hallo ESP. Danach redest du "
-    "live ueber ein Sprachmodell von OpenAI (welches, steht unten).\n"
-    "- Einstellungen: Webinterface unter http://pixel.local. Antippen ist ein Stups, gedrueckt halten ist Streicheln, "
-    "Antippen waehrend du sprichst unterbricht dich. Nach laengerer Ruhe schlaefst du ein.\n"
-    "- Wenn etwas nicht klappt (kein WLAN, Limit erreicht, Stoerung), zeigst du das mit einer Augen-Animation statt "
-    "mit einer Fehlermeldung.";
+// Everything about itself is built into the firmware (live.cpp ABOUT): this is for what the owner adds
+static const char* DEFAULT_KNOWLEDGE = "";
+// the self descriptions the knowledge field held up to version 1.1 (all start like this): now built in
+static const char* OLD_KNOWLEDGE_HEAD = "Wissen ueber dich selbst (nur erwaehnen";
 
 struct All {
   Conv c;
   eyes::Look l;
   int brightness, fps;
   int ledMode, ledBright;
+  uint32_t ledColor;              // 0 = the colour of the eyes
   int offMin;                     // display off after this many minutes without anyone (0 = never)
   bool upAuto;                    // updates from GitHub by itself ...
   int upAt;                       // ... at this minute of the day
@@ -116,6 +89,7 @@ static void defaults() {
   S.fps = CFG_MAX_FPS;
   S.ledMode = 1;
   S.ledBright = 40;
+  S.ledColor = 0;
   S.upAuto = true;
   S.upAt = 3 * 60 + 30;  // at night, when nobody talks to it
   S.schedN = 3;  // an example, off until switched on
@@ -237,6 +211,7 @@ static cJSON* build(bool withMeta) {
   cJSON_AddNumberToObject(d, "fps", S.fps);
   cJSON_AddNumberToObject(d, "leds", S.ledMode);
   cJSON_AddNumberToObject(d, "led_brightness", S.ledBright);
+  colorOut(d, "led_color", S.ledColor);
   cJSON_AddNumberToObject(d, "off_min", S.offMin);
   cJSON_AddBoolToObject(d, "schedule_on", S.schedOn);
   cJSON* sc = cJSON_AddArrayToObject(d, "schedule");
@@ -290,6 +265,7 @@ static cJSON* build(bool withMeta) {
       colorOut(o, "iris", eyes::colorwayColor(i, 1));
       cJSON_AddItemToArray(cw, o);
     }
+    cJSON_AddItemToObject(m, "presets", cJSON_Parse(PRESETS_JSON));
     const char* voices[] = {"marin", "cedar", "juni", "flitz", "brise", "sillage", "alloy", "ash", "ballad", "coral",
                             "echo", "sage", "shimmer", "verse", "quartz", "ripple", "vesper", "willow", "stone",
                             "gleam", "meridian", "beacon", "delta", "cinder", "bossa", "tempo", "harema", "nira",
@@ -398,6 +374,7 @@ static void merge(const cJSON* j) {
     num(d, "fps", S.fps);
     num(d, "leds", S.ledMode);
     num(d, "led_brightness", S.ledBright);
+    colorIn(d, "led_color", S.ledColor);
     num(d, "off_min", S.offMin);
     flag(d, "schedule_on", S.schedOn);
     const cJSON* sc = cJSON_GetObjectItem(d, "schedule");
@@ -483,17 +460,9 @@ static void merge(const cJSON* j) {
                         "beacon", "delta", "cinder", "bossa", "tempo", "harema", "nira", "noeul", "nuri", "shida"})
     known |= !strcmp(v, S.c.voice);
   if (!known) snprintf(S.c.voice, sizeof(S.c.voice), "%s", CFG_LIVE_VOICE);
-  // the knowledge base from the Gemini days describes the wrong system (an own text stays untouched)
-  if (strstr(S.c.knowledge, "Gemini") || !strcmp(S.c.knowledge, OLD_KNOWLEDGE))
+  // an old self description (or the one from the Gemini days) would contradict the built-in one
+  if (strstr(S.c.knowledge, "Gemini") || !strncmp(S.c.knowledge, OLD_KNOWLEDGE_HEAD, strlen(OLD_KNOWLEDGE_HEAD)))
     snprintf(S.c.knowledge, sizeof(S.c.knowledge), "%s", DEFAULT_KNOWLEDGE);
-  // an own text keeps everything except the old claim that it always talks over GPT-Live
-  static const char* OLD_MODEL = "ueber OpenAI GPT-Live (Sprache wird in beide Richtungen gestreamt)";
-  if (char* p = strstr(S.c.knowledge, OLD_MODEL)) {
-    static const char* NEW_MODEL = "ueber ein Sprachmodell von OpenAI (welches, steht unten)";
-    EXT_RAM_BSS_ATTR static char rest[sizeof(S.c.knowledge)];  // not on the (web server) stack
-    snprintf(rest, sizeof(rest), "%s", p + strlen(OLD_MODEL));
-    snprintf(p, sizeof(S.c.knowledge) - (p - S.c.knowledge), "%s%s", NEW_MODEL, rest);
-  }
 }
 
 // ---------------------------------------------------------------- storage
@@ -618,9 +587,10 @@ void conv(Conv& out) {
 }
 const char* apiKey() { return S.c.apiKey[0] ? S.c.apiKey : OPENAI_API_KEY; }
 int brightness() { return S.brightness; }
-void leds(int& mode, int& bright) {
+void leds(int& mode, int& bright, uint32_t& color) {
   mode = S.ledMode;
   bright = S.ledBright;
+  color = S.ledColor;
 }
 int fps() { return S.fps; }
 int displayOffMin() { return S.offMin; }

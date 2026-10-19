@@ -2650,7 +2650,10 @@ static void groove(float dt) {
   roamTo(drv > 0.f && fig == 1 ? stepX * drv : 0.f, 0.f, 1.f + 0.07f * mLoud * s);
 }
 
+static float fpsNow = 60.f;
+float fps() { return fpsNow; }
 void update(float dt) {
+  if (dt > 0.f) fpsNow += (1.f / dt - fpsNow) * 0.05f;
   if (dt > 0.1f) dt = 0.1f;
   T += dt;
   memset(&P, 0, sizeof(P));

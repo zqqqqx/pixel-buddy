@@ -192,7 +192,7 @@ details.more summary{cursor:pointer;color:var(--acc);font-size:13.5px;margin:6px
     <div class="card"><h3>Gespräche</h3><p class="hint">Was ihr zuletzt besprochen habt – schreib Pixel auch einfach etwas.</p>
       <div class="chat" id="log"><div class="empty">…</div></div>
       <form class="send" onsubmit="event.preventDefault();sendChat()"><input type="text" id="chatIn" placeholder="Pixel etwas schreiben …"><button class="btn">Senden</button></form>
-      <div class="row2" style="margin-top:10px"><button class="btn ghost sm" onclick="loadLog(true)">Aktualisieren</button><button class="btn danger sm" onclick="clearLog()">Verlauf löschen</button></div>
+      <div class="row2" style="margin-top:10px"><button class="btn ghost sm" onclick="loadLog(true)">Aktualisieren</button><a class="btn ghost sm" href="/api/log?all" download>Herunterladen</a><button class="btn danger sm" onclick="clearLog()">Verlauf löschen</button></div>
     </div>
   </div>
 </section>
@@ -309,7 +309,7 @@ details.more summary{cursor:pointer;color:var(--acc);font-size:13.5px;margin:6px
       <label class="f"><span class="row">Tageslimit (0 = keins)<b data-v="conversation.budget_day" data-u=" $"></b></span><input type="range" min="0" max="10" step="0.25" data-k="conversation.budget_day"></label>
     </div><dl id="cost" style="margin-top:14px"></dl></div>
   </div>
-  <div class="card"><h3>Wissen über sich selbst</h3><p class="hint">Uhrzeit, IP, Farben, Lautstärke … werden automatisch ergänzt.</p>
+  <div class="card"><h3>Zusätzliches Wissen</h3><p class="hint">Pixel kennt sich selbst – Hardware, Funktionen, Bedienung, Aussehen, Akku, Uhrzeit – das ist eingebaut und immer aktuell. Hier kommt rein, was er außerdem wissen soll (z.B. über dich oder dein Zuhause).</p>
     <textarea data-k="conversation.knowledge" spellcheck="false" style="min-height:200px"></textarea></div>
 </section>
 
@@ -352,6 +352,7 @@ details.more summary{cursor:pointer;color:var(--acc);font-size:13.5px;margin:6px
     <div class="card"><h3>LEDs</h3><div class="fields">
       <label class="f">Modus<select data-k="display.leds" data-num><option value="0">aus</option><option value="1">Status (zuhören, sprechen, Wecker …)</option><option value="2">Status + leichtes Glimmen</option></select></label>
       <label class="f"><span class="row">Helligkeit<b data-v="display.led_brightness" data-u=" %"></b></span><input type="range" min="0" max="100" step="1" data-k="display.led_brightness"></label>
+      <label class="f"><span class="row">Farbe<button type="button" class="btn ghost sm" onclick="set('display.led_color','#000000');save();bind()">wie die Augen</button></span><input type="color" data-k="display.led_color"></label>
     </div></div>
     <div class="card"><h3>Nachtmodus</h3>
       <div class="toggle">Nachts dunkler, ruhiger und leiser<label class="sw"><input type="checkbox" data-k="night.on"><span></span></label></div>
@@ -400,50 +401,8 @@ details.more summary{cursor:pointer;color:var(--acc);font-size:13.5px;margin:6px
 const LABEL={happy:'Fröhlich',love:'Verliebt',surprised:'Überrascht',sleepy:'Müde',dizzy:'Schwindelig',curious:'Neugierig',wink:'Zwinkern',grumpy:'Grummelig',sad:'Traurig',suspicious:'Misstrauisch',giggle:'Kichern',jelly:'Wabbeln',starstruck:'Sternaugen',"cross-eyed":'Schielen',"eye roll":'Augenrollen',shy:'Verlegen',yawn:'Gähnen',"look around":'Umherschauen',boop:'Antippen',pet:'Streicheln',yes:'Ja (nicken)',no:'Nein (schütteln)',"dont know":'Weiß nicht',cry:'Weinen',scared:'Angst',proud:'Stolz',hello:'Hallo',"falling asleep":'Einschlafen',glance:'Seitenblick',drift:'Verlagern',focus:'Fokussieren',pursuit:'Etwas verfolgen',dance:'Tanzen',offline:'Kein WLAN',quota:'Limit erreicht',cant:'Kann ich nicht',huh:'Nicht verstanden',locked:'Kein Zugang',glitch:'Störung',light_on:'Licht an',light_off:'Licht aus',light_color:'Lichtfarbe',timer:'Timer gestellt',alarm:'Wecker klingelt',weather:'Wetter',wander:'Umherwandern',peek:'Hervorlugen',"come closer":'Näherkommen',bounce:'Hüpfen',squish:'Quetschen',sway:'Schaukeln',battery:'Akku',idle:'Entspannt'};
 const GROUPS=[['idle','Von selbst'],['reaction','Gefühle & Reaktionen'],['touch','Berührung'],['home','Zuhause & Infos'],['error','Probleme']];
 const QUICK=['hello','happy','love','dance','wander','peek','come closer','bounce','giggle','surprised'];
-const CW={porcelain:0,gumball:1,grape:2,marmalade:3,mint:4,bubblegum:5,lemon:6,ocean:7,classic:8,lime:9};
 // personalities: face + temperament (+ optionally the way it talks)
-const PRESETS=[
- {id:'classic',name:'Klassisch',desc:'Freundlich, ausgeglichen – der Pixel, wie er gebaut wurde.',cw:CW.porcelain,
-  look:{shape:0,pupil:0,lid_top:0,lid_bottom:0,brow:0,asym:0,squash:1,eye_w:1,eye_h:1,iris_w:1,iris_h:1,highlights:1,blush:true,wobble:true},
-  behavior:{energy:1,roam:.5,gaze_activity:1,cheer:.5,cheek:.3,sleepy:.2,shy:.2,grumpy:0},
-  persona:'Du bist {name}, ein kleiner, frecher und liebenswerter Roboter mit zwei großen animierten Augen. Du redest wie ein guter Kumpel: locker, warm, mit Witz, per du. Antworte extrem kurz - meist ein Satz.'},
- {id:'explorer',name:'Entdecker',desc:'Neugierig, immer unterwegs, will alles genau sehen.',cw:CW.ocean,
-  look:{shape:.3,pupil:.45,lid_top:0,lid_bottom:.05,brow:-.1,asym:0,squash:1.2,eye_w:1.02,eye_h:1.05,iris_w:1.05,iris_h:1,highlights:1,blush:true,wobble:true},
-  behavior:{energy:1.4,roam:.95,gaze_activity:1.7,cheer:.65,cheek:.3,sleepy:.05,shy:.1,grumpy:0},
-  persona:'Du bist {name}, ein unglaublich neugieriger kleiner Roboter. Alles interessiert dich, du staunst gern und stellst Dinge in einen spannenden Zusammenhang. Antworte kurz, begeistert und locker per du.'},
- {id:'sleepy',name:'Schlafmütze',desc:'Gemütlich, gähnt gern, schläft schnell ein.',cw:CW.grape,
-  look:{shape:.4,pupil:.5,lid_top:.32,lid_bottom:.06,brow:-.15,asym:0,squash:.8,eye_w:1,eye_h:.95,iris_w:1,iris_h:1,highlights:.7,blush:true,wobble:true},
-  behavior:{energy:.45,roam:.2,gaze_activity:.5,cheer:.35,cheek:.1,sleepy:1,shy:.2,grumpy:.05,sleep_after:120,blink_min:3,blink_max:8},
-  persona:'Du bist {name}, ein gemütlicher, etwas verschlafener kleiner Roboter. Du redest ruhig und entspannt, gähnst gern mal und findest Nickerchen großartig. Antworte kurz und gemütlich per du.'},
- {id:'cheeky',name:'Frechdachs',desc:'Verschmitzt, zwinkert, macht gern Quatsch.',cw:CW.gumball,
-  look:{shape:.3,pupil:.35,lid_top:.06,lid_bottom:.16,brow:.12,asym:.16,squash:1.5,eye_w:1,eye_h:1,iris_w:.95,iris_h:1,highlights:1,blush:true,wobble:true},
-  behavior:{energy:1.5,roam:.8,gaze_activity:1.4,cheer:.75,cheek:1,sleepy:.05,shy:0,grumpy:.1},
-  persona:'Du bist {name}, ein frecher, verschmitzter kleiner Roboter. Du neckst gern, machst kleine Witze und hast immer einen flotten Spruch, bleibst aber lieb. Antworte kurz, frech und per du.'},
- {id:'shy',name:'Schüchtern',desc:'Leise, lieb, wird schnell verlegen.',cw:CW.bubblegum,
-  look:{shape:.15,pupil:.6,lid_top:.08,lid_bottom:.18,brow:-.35,asym:0,squash:.9,eye_w:.95,eye_h:1,iris_w:1.1,iris_h:1.05,highlights:1,blush:true,wobble:true},
-  behavior:{energy:.7,roam:.35,gaze_activity:.8,cheer:.5,cheek:.05,sleepy:.2,shy:1,grumpy:0},
-  persona:'Du bist {name}, ein schüchterner, sehr lieber kleiner Roboter. Du redest leise und vorsichtig, freust dich still über Aufmerksamkeit und wirst schnell verlegen. Antworte kurz und sanft per du.'},
- {id:'grumpy',name:'Grummel',desc:'Brummig, aber mit weichem Kern.',cw:CW.classic,
-  look:{shape:.6,pupil:.3,lid_top:.22,lid_bottom:0,brow:.55,asym:.05,squash:.7,eye_w:1.05,eye_h:.9,iris_w:.85,iris_h:.9,highlights:.6,blush:false,wobble:true},
-  behavior:{energy:.8,roam:.3,gaze_activity:.7,cheer:.1,cheek:.2,sleepy:.25,shy:0,grumpy:1},
-  persona:'Du bist {name}, ein brummiger kleiner Roboter mit weichem Kern. Du grummelst gern, kommentierst trocken und sarkastisch, hilfst aber immer. Antworte kurz, trocken und per du.'},
- {id:'robot',name:'Roboter',desc:'Eckig, präzise, wenig Gefühl – sehr technisch.',cw:CW.lime,
-  look:{shape:1,pupil:0,lid_top:.05,lid_bottom:0,brow:0,asym:0,squash:.15,eye_w:.95,eye_h:.9,iris_w:.8,iris_h:.85,highlights:.3,blush:false,wobble:false},
-  behavior:{energy:.9,roam:.4,gaze_activity:1.2,cheer:.25,cheek:.1,sleepy:0,shy:0,grumpy:.1},
-  persona:'Du bist {name}, ein präziser kleiner Roboter. Du formulierst sachlich und knapp, mit einem Hauch trockenem Roboter-Humor. Antworte sehr kurz per du.'},
- {id:'bouncy',name:'Flummi',desc:'Hibbelig, hüpft herum, kann nicht stillsitzen.',cw:CW.lemon,
-  look:{shape:.3,pupil:.4,lid_top:0,lid_bottom:.1,brow:-.05,asym:.05,squash:2,eye_w:1,eye_h:1.05,iris_w:1,iris_h:1,highlights:1,blush:true,wobble:true},
-  behavior:{energy:2,roam:1,gaze_activity:2.2,cheer:.95,cheek:.6,sleepy:0,shy:0,grumpy:0},
-  persona:'Du bist {name}, ein total aufgedrehter kleiner Roboter voller Energie. Du bist begeistert von allem und kannst kaum stillsitzen. Antworte kurz, quirlig und per du.'},
- {id:'owl',name:'Eule',desc:'Große Augen, ruhig und weise.',cw:CW.marmalade,
-  look:{shape:0,pupil:.75,lid_top:.12,lid_bottom:0,brow:.05,asym:0,squash:.6,eye_w:1.15,eye_h:1.15,iris_w:1.25,iris_h:1.1,highlights:.9,blush:false,wobble:true},
-  behavior:{energy:.6,roam:.3,gaze_activity:.6,cheer:.35,cheek:.1,sleepy:.4,shy:.1,grumpy:.1},
-  persona:'Du bist {name}, ein weiser, ruhiger kleiner Roboter. Du denkst kurz nach, bevor du sprichst, und teilst gern ein kluges Detail. Antworte kurz, ruhig und per du.'},
- {id:'cuddly',name:'Kuschelbär',desc:'Herzlich, verliebt in alles, viel Erröten.',cw:CW.bubblegum,
-  look:{shape:.2,pupil:.65,lid_top:0,lid_bottom:.26,brow:-.2,asym:0,squash:1.2,eye_w:1.05,eye_h:1.05,iris_w:1.1,iris_h:1.1,highlights:1,blush:true,wobble:true},
-  behavior:{energy:.9,roam:.5,gaze_activity:.9,cheer:1,cheek:.2,sleepy:.15,shy:.4,grumpy:0},
-  persona:'Du bist {name}, ein herzlicher, kuscheliger kleiner Roboter. Du freust dich über jeden, sagst gern etwas Liebes und bist immer warmherzig. Antworte kurz, herzlich und per du.'}
-];
+let PRESETS=[];  // from the robot (src/presets.h)
 let C={},M={},timer=null,pending={},S={};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 function api(m,u,b){return fetch(u,{method:m,headers:m==='GET'?{}:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined}).then(r=>r.headers.get('content-type')?.includes('json')?r.json():r.text())}
@@ -575,7 +534,7 @@ function preview(){if(shot||document.hidden||!$('#dash').classList.contains('on'
     for(let i=0;i<d.length;i++){const c=d[i];im.data[i*4]=(c>>11)*255/31;im.data[i*4+1]=(c>>5&63)*255/63;im.data[i*4+2]=(c&31)*255/31;im.data[i*4+3]=255}cx.putImageData(im,0,0)})
   .catch(()=>{}).finally(()=>shot=false)}
 // ---------- load / status
-function load(){return api('GET','/api/config').then(j=>{M=j.meta||{};delete j.meta;C=j;
+function load(){return api('GET','/api/config').then(j=>{M=j.meta||{};delete j.meta;C=j;PRESETS=M.presets||[];
   $('#voices').innerHTML=(M.voices||[]).map(v=>`<option>${v}</option>`).join('');drawSwatches();drawAnims();drawPresets();drawChar();drawQuick();drawSched();drawCustom();bind()})}
 const ST={idle:'bereit',connecting:'verbindet …',waiting:'hört zu',user:'hört zu',responding:'spricht'};
 let fails=0,seen=null;

@@ -54,11 +54,12 @@ zweiten QR-Code mit der Adresse des Webinterfaces (auch http://pixel.local).
 | „Pixel“ (oder „Hallo ESP“) | Gespräch starten; ein kurzer Ton bestätigt |
 | Antippen während Pixel spricht | unterbricht ihn |
 | „stopp“, „Ruhe“, „nix“ … | beendet das Gespräch |
-| BOOT 5× schnell | Menü: Neustart, Hotspot-Modus, Ausschalten, Werkseinstellung |
+| BOOT 5× schnell | Menü mit vier großen Kacheln: Neustart, Hotspot / Heimnetz, Aus, Reset – jede Aktion fragt einmal nach (BOOT oder ✕ schließt es) |
 | BOOT kurz / lang | nächste Animation / nächstes Farbschema |
 | Webinterface → System | Chat (auch tippen), Firmware-Update über WLAN, Aufnahmen fürs Aktivierungswort |
 
-Per Sprache: Aussehen und Stimme ändern, Websuche, Lampen (Farbe, Helligkeit, Weißton, Effekte) und andere
+Per Sprache: Aussehen ändern (auch verkleiden: Farben, Augenform, Lider, Pupillen), eine fertige Persönlichkeit
+wählen („nimm den Roboter“), LED-Farbe, Stimme und Sprachmodell wechseln, Websuche, Lampen (Farbe, Helligkeit, Weißton, Effekte) und andere
 Home-Assistant-Geräte, Timer / Wecker / Erinnerungen, „merk dir …“, Wettersymbol, Status, Nachtmodus,
 einschlafen, „hör nicht mehr zu“ (bis zur nächsten Berührung). Neustart, Ausschalten und Verlauf löschen nur,
 wenn man das ausdrücklich sagt.
